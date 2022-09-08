@@ -1,0 +1,119 @@
+{
+  "programme": {
+    "type": "brand",
+    "pid": "b006qpgr",
+    "image": {
+      "pid": "p04jqv00"
+    },
+    "title": "The Archers",
+    "short_synopsis": "Contemporary drama in a rural setting",
+    "medium_synopsis": "Contemporary drama in a rural setting",
+    "first_broadcast_date": "2007-01-19T14:00:00Z",
+    "display_title": {
+      "title": "The Archers",
+      "subtitle": ""
+    },
+    "aggregated_episode_count": 3989,
+    "ownership": {
+      "service": {
+        "type": "radio",
+        "id": "bbc_radio_four",
+        "key": "radio4",
+        "title": "BBC Radio 4"
+      }
+    },
+    "links": [
+      {
+        "type": "miscellaneous",
+        "title": "The Archers on Facebook",
+        "url": "http://www.facebook.com/BBCTheArchers"
+      },
+      {
+        "type": "priority_content",
+        "title": "Visit the homepage",
+        "url": "http://www.bbc.co.uk/radio4/features/the-archers/"
+      },
+      {
+        "type": "priority_content",
+        "title": "Download the podcast",
+        "url": "http://www.bbc.co.uk/podcasts/series/archers"
+      },
+      {
+        "type": "miscellaneous",
+        "title": "The Archers on Twitter",
+        "url": "http://twitter.com/#!/bbcthearchers"
+      },
+      {
+        "type": "miscellaneous",
+        "title": "The Ambridge Observer",
+        "url": "http://ambridgeobserver.blogspot.co.uk/"
+      },
+      {
+        "type": "miscellaneous",
+        "title": "Shambridge (affectionate pastiches of The Archers)",
+        "url": "https://soundcloud.com/shambridge"
+      },
+      {
+        "type": "miscellaneous",
+        "title": "Lowfield (daily episodes summarised)",
+        "url": "http://www.lowfield.co.uk/archers/thisweek.phtml"
+      },
+      {
+        "type": "miscellaneous",
+        "title": "Peet’s \u0027Mustardland\u0027 (fan forum)",
+        "url": "http://www.paranormal.org.uk/mustardland/"
+      },
+      {
+        "type": "miscellaneous",
+        "title": "The Village Pump (fan forum)",
+        "url": "http://thevillagepump.freeforums.net/"
+      },
+      {
+        "type": "miscellaneous",
+        "title": "Ambridge Addicts (fan forum on Facebook)",
+        "url": "https://www.facebook.com/groups/ambridgeaddicts/"
+      },
+      {
+        "type": "miscellaneous",
+        "title": "Archers Appreciation (fan forum on Facebook)",
+        "url": "https://www.facebook.com/groups/2215391357/"
+      },
+      {
+        "type": "miscellaneous",
+        "title": "The Archers - The Official Unofficial Discussion Group (fan forum on Facebook)",
+        "url": "https://www.facebook.com/groups/435989973172653/"
+      },
+      {
+        "type": "miscellaneous",
+        "title": "UMRA (uk.media.radio.archers - the longest-established Archers fan forum)",
+        "url": "http://uk.media.radio.archers.narkive.com/"
+      },
+      {
+        "type": "miscellaneous",
+        "title": "Upstairs at The Bull (fan forum on Facebook)",
+        "url": "https://www.facebook.com/groups/upstairsatthebull/"
+      }
+    ],
+    "supporting_content_items": [],
+    "categories": [
+      {
+        "type": "genre",
+        "id": "C00036",
+        "key": "soaps",
+        "title": "Soaps",
+        "narrower": [],
+        "broader": {
+          "category": {
+            "type": "genre",
+            "id": "C00017",
+            "key": "drama",
+            "title": "Drama",
+            "broader": {},
+            "has_topic_page": false
+          }
+        },
+        "has_topic_page": false
+      }
+    ]
+  }
+}

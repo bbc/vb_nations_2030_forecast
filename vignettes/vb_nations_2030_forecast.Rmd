@@ -1,0 +1,12 @@
+---
+title: "Forcasting traffic to the BBC News Nations pages up to 2030"
+author: "vicky_banks"
+date: \today
+output: pdf_document
+bibliography: references.bib
+vignette: >
+  %\VignetteIndexEntry{ Forcasting traffic to the BBC News Nations pages up to 2030 }
+  %\VignetteEngine{knitr::rmarkdown}
+  %\usepackage[utf8]{inputenc} 
+---
+

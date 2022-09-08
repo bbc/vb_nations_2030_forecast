@@ -1,0 +1,21 @@
+Package: vb_nations_2030_forecast
+Title: Forcasting traffic to the BBC News Nations pages up to 2030
+Version: 0.0.1
+Description: Looks at the previous traffic to the nations pages and aims to forcast their future traffic
+Authors@R: person(strsplit("vicky_banks", ' ')[[1]][1],
+				  strsplit("vicky_banks", ' ')[[1]][2],
+				  email = "vicky_banks@bbc.co.uk",
+                  role = c("aut", "cre"))
+Depends: R (>= 3.3.1)
+Imports:
+	renv
+Suggests:
+    testthat,
+    knitr,
+    rmarkdown
+VignetteBuilder: knitr
+License: MIT
+Encoding: UTF-8
+LazyData: true
+URL: https://github.com/vicky_banks/vb_nations_2030_forecast
+BugReports: https://github.com/vicky_banks/vb_nations_2030_forecast/issues
