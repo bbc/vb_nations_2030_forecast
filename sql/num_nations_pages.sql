@@ -37,7 +37,7 @@ WHERE dt >= '<params.run_date>' AND dt < replace(cast('<params.run_date>'::varch
        page_producer ILIKE '%Ireland%' OR
        page_producer ILIKE '%English%')
 GROUP BY 1,2,3
-HAVING visits >=100
+HAVING visits >=10
 ORDER BY visits asc
 )
 
