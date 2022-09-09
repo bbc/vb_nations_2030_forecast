@@ -1,13 +1,13 @@
 BEGIN;
 set search_path TO 'central_insights_sandbox';
 
-DROP TABLE IF EXISTS vb_news_regions_num_pages;
+/*DROP TABLE IF EXISTS vb_news_regions_num_pages;
 CREATE TABLE vb_news_regions_num_pages
 (
     week_commencing date,
     page_producer   varchar(400),
     pages           bigint
-) DISTSTYLE AUTO;
+) DISTSTYLE AUTO;*/
 
 GRANT ALL on vb_news_regions_num_pages to vicky_banks with grant option;
 GRANT SELECT on vb_news_regions_num_pages to GROUP central_insights;
@@ -55,4 +55,5 @@ SELECT  week_commencing, page_producer, visitors, round(visits_raw,-4) as visits
 
 
 
-SELECT DISTINCT week_commencing  FROM vb_news_regions_num_pages ORDER BY 1 DESC;*/
+SELECT DISTINCT week_commencing, page_producer, pages FROM vb_news_regions_num_pages ORDER BY 1,2 DESC;*/
+
