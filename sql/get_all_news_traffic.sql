@@ -31,7 +31,7 @@ WHERE dt >= '<params.run_date>' AND dt < replace(cast('<params.run_date>'::varch
   AND page_producer NOT ILIKE '%sport%'
   AND page_name != 'keepalive'
   AND app_type != 'web'      -- to exclude the unusual data from interactive maps
-GROUP BY 1, 2
+GROUP BY 1
 ORDER BY visitors_raw desc
 
 ;
