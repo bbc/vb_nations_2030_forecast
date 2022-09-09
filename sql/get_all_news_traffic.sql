@@ -46,7 +46,7 @@ SELECT  week_commencing,visitors, round(visits_raw,-4) as visits FROM vb_news_re
 SELECT DISTINCT week_commencing  FROM vb_news_regions_historic_users_all_news ORDER BY 1 DESC;*/
 
 
-SELECT DISTINCT week_commencing  FROM vb_news_regions_historic_users_all_news ORDER BY 1 DESC;
+--SELECT DISTINCT week_commencing  FROM vb_news_regions_historic_users_all_news ORDER BY 1 DESC;
 
 
 
