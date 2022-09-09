@@ -1,7 +1,7 @@
 BEGIN;
 set search_path TO 'central_insights_sandbox';
 
-DROP TABLE IF EXISTS vb_news_regions_historic_users_all_news;
+/*DROP TABLE IF EXISTS vb_news_regions_historic_users_all_news;
 CREATE TABLE vb_news_regions_historic_users_all_news
 (
     week_commencing     date,
@@ -10,7 +10,7 @@ CREATE TABLE vb_news_regions_historic_users_all_news
     visitors            bigint,
     visits_raw          bigint,
     request_per_visitor double precision
-) DISTSTYLE AUTO;
+) DISTSTYLE AUTO;*/
 
 GRANT ALL on vb_news_regions_historic_users_all_news to vicky_banks with grant option;
 GRANT SELECT on vb_news_regions_historic_users_all_news to GROUP central_insights;
@@ -44,6 +44,11 @@ SELECT  week_commencing,visitors, round(visits_raw,-4) as visits FROM vb_news_re
 
 
 SELECT DISTINCT week_commencing  FROM vb_news_regions_historic_users_all_news ORDER BY 1 DESC;*/
+
+
+SELECT DISTINCT week_commencing  FROM vb_news_regions_historic_users_all_news ORDER BY 1 DESC;
+
+
 
 
 
