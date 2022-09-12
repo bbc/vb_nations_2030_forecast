@@ -16,30 +16,30 @@ round_any <- function(x, accuracy, func){func(x/ accuracy) * accuracy}
 
 
 ### locally
-# driver <-JDBC("com.amazon.redshift.jdbc41.Driver","~/.redshiftTools/redshift-driver.jar",identifier.quote = "`")
-# my_aws_creds <-read.csv("~/Documents/Projects/DS/redshift_creds.csv",header = TRUE,stringsAsFactors = FALSE)
-# url <-paste0("jdbc:redshift://localhost:5439/redshiftdb?user=",my_aws_creds$user,"&password=",my_aws_creds$password)
-# conn <- dbConnect(driver, url)
+driver <-JDBC("com.amazon.redshift.jdbc41.Driver","~/.redshiftTools/redshift-driver.jar",identifier.quote = "`")
+my_aws_creds <-read.csv("~/Documents/Projects/DS/redshift_creds.csv",header = TRUE,stringsAsFactors = FALSE)
+url <-paste0("jdbc:redshift://localhost:5439/redshiftdb?user=",my_aws_creds$user,"&password=",my_aws_creds$password)
+conn <- dbConnect(driver, url)
 
 
 ######### Get Redshift creds  MAP #########
-get_redshift_connection <- function() {
-  driver <-JDBC(driverClass = "com.amazon.redshift.jdbc.Driver",classPath = "/usr/lib/drivers/RedshiftJDBC42-no-awssdk-1.2.41.1065.jar",identifier.quote = "`")
-  url <-str_glue("jdbc:redshift://live-idl-prod-redshift-component-redshiftcluster-1q6vyltqf8lth.ctm1v7db0ubd.eu-west-1.redshift.amazonaws.com:5439/redshiftdb?user={Sys.getenv('REDSHIFT_USERNAME')}&password={Sys.getenv('REDSHIFT_PASSWORD')}")
-  conn <- dbConnect(driver, url)
-  return(conn)
-}
-#Variable to hold the connection info
-conn <- get_redshift_connection()
+# get_redshift_connection <- function() {
+#   driver <-JDBC(driverClass = "com.amazon.redshift.jdbc.Driver",classPath = "/usr/lib/drivers/RedshiftJDBC42-no-awssdk-1.2.41.1065.jar",identifier.quote = "`")
+#   url <-str_glue("jdbc:redshift://live-idl-prod-redshift-component-redshiftcluster-1q6vyltqf8lth.ctm1v7db0ubd.eu-west-1.redshift.amazonaws.com:5439/redshiftdb?user={Sys.getenv('REDSHIFT_USERNAME')}&password={Sys.getenv('REDSHIFT_PASSWORD')}")
+#   conn <- dbConnect(driver, url)
+#   return(conn)
+# }
+# #Variable to hold the connection info
+# conn <- get_redshift_connection()
 
 dbGetQuery(conn,"select distinct brand_title, series_title from prez.scv_vmb ORDER BY RANDOM() limit 10;")
 
+## get news regions data
 sql<- "SELECT * FROM central_insights_sandbox.vb_news_regions_historic_users;"
 nations_traffic<-dbGetQuery(conn, sql)
 nations_traffic$week_commencing<- ymd(nations_traffic$week_commencing)
 nations_traffic[,3:7] <- sapply(nations_traffic[,3:7],as.numeric)
 
-nations_traffic$week_commencing %>% head()
 
 ## get an extra column where each date is just first of the month to label axis
 library(zoo)
@@ -53,7 +53,7 @@ nations_traffic %>%
 
 #### Make time series graph
 nations_traffic %>% tail()
-
+## get simple axes, with min and max dates
 temp <- nations_traffic %>%
   group_by(year, quarter) %>%
   summarise(quarter_min = min(year_month)) %>%
@@ -65,66 +65,148 @@ x_axis_dates <- temp$quarter_min
 x_axis_dates %>% length()
 rm(temp)
 
+## label key events
 labels <-
-  data.frame(week_commencing = ymd(c('2020-03-16', '2020-03-23', '2020-08-10', '2021-01-04', '2021-03-08', 
-                                     '2020-10-19', '2021-08-09', '2022-08-01')),
-             event = c("UK schools close", "Lockdown 1", "Scottish exam results","Lockdown 3", "Sarah Everard murder",
-                       "Welsh national lockdown", "A Level results", "Euros win"),
-             page_producer = c("England","England", "Scotland", "England", "England",
-                               "Wales","England", "England" )
-  )%>%  left_join(nations_traffic[,1:3], by = c("week_commencing", "page_producer") )
+  data.frame(
+    week_commencing = ymd(
+      c(
+        '2020-03-16',
+        '2020-03-23',
+        '2020-08-10',
+        '2021-01-04',
+        '2021-03-08',
+        '2020-10-19',
+        '2021-08-09',
+        '2022-08-01',
+        '2020-03-09'
+      )
+    ),
+    event = c(
+      "UK schools close",
+      "Lockdown 1",
+      "Scottish exam results",
+      "Lockdown 3",
+      "Sarah Everard murder",
+      "Welsh national lockdown",
+      "A Level results",
+      "Euros win",
+      "RI schools close"
+    ),
+    page_producer = c(
+      "England",
+      "England",
+      "Scotland",
+      "England",
+      "England",
+      "Wales",
+      "England",
+      "England",
+      "Northern Ireland"
+    )
+  ) %>%  left_join(nations_traffic[, 1:3], by = c("week_commencing", "page_producer"))
+
 labels
-labels %>%  left_join(nations_traffic[,1:3], by = c("week_commencing", "page_producer") )
 
-ggplot(data= nations_traffic, aes(x = week_commencing, colour = page_producer) )+
-  geom_line(aes(y = visitors_raw))+
-  geom_point(data = labels,
-             aes(y = visitors_raw, x = week_commencing))+
-  #geom_line(aes(y = mean),linetype="dotted")+
-  ylab("Visitors")+
-  xlab("Date")+
-  labs(title = "Weekly visitor BBC News Nations pages (w/c 2019-03-04 to 2022-08-29)") +
-  scale_y_continuous(label = comma,
-                     n.breaks = 10) +
-  scale_x_date(labels = date_format("%Y-%m-%d"),
-               breaks = x_axis_dates)+
-  theme(axis.text.x = element_text(angle = 90))+
-  # geom_vline(xintercept = ymd(labels$week_commencing), linetype="dashed",
-  #            color = "black")+
-  geom_text( data = labels,
-             mapping = aes(x = week_commencing, y = visitors_raw, #Inf, 
-                           label = event),
-             #nudge_y = 0.1,
-             #hjust   = 0.1,
-             vjust   = -1.0,
-             colour = "black")
-
-
-ggplot(data= nations_traffic, aes(x = week_commencing, colour = page_producer) )+
-  geom_line(aes(y = visitors_raw))+
-  geom_point(data = labels,
-             aes(y = visitors_raw, x = week_commencing))+
-  #geom_line(aes(y = mean),linetype="dotted")+
-  ylab("Visitors")+
-  xlab("Date")+
-  labs(title = "Weekly visitor BBC News Nations pages (w/c 2019-03-04 to 2022-08-29)") +
-  scale_y_continuous(label = comma,
-                     n.breaks = 10) +
-  scale_x_date(labels = date_format("%Y-%m-%d"),
-               breaks = x_axis_dates)+
-  theme(axis.text.x = element_text(angle = 90))+
-  # geom_vline(xintercept = ymd(labels$week_commencing), linetype="dashed",
-  #            color = "black")+
-  geom_text( data = labels,
-             mapping = aes(x = week_commencing, y = visitors_raw, #Inf, 
-                           label = event),
-             #nudge_y = 0.1,
-             #hjust   = 0.1,
-             vjust   = -1.0,
-             colour = "black")+
-  facet_wrap(~ page_producer, nrow = 4, scales = "free_y")
+## get lines for Christmas/new year
+new_year<-ymd(c("2020-01-01","2021-01-01","2022-01-01"))
 
 
 
+############## function so as to not repeat code for similar graphs ##########
+make_graph <- function(data, y_value, labels, v_line, title, y_lab, split) {
+  ggplot(data = data, aes(x = week_commencing, colour = page_producer)) +
+    geom_line(aes(y = !!sym(y_value))) +
+    {if(is.data.frame(labels))geom_point(data = labels,
+               aes(y = !!sym(y_value), x = week_commencing))} +
+    ylab(y_lab) +
+    xlab("Date") +
+    labs(title = title) +
+    scale_y_continuous(label = comma,
+                       n.breaks = 10) +
+    geom_vline(xintercept = v_line,
+               linetype = "dashed",
+               color = "grey") +
+    scale_x_date(
+      labels = date_format("%Y-%m-%d"),
+      breaks = x_axis_dates,
+      sec.axis = sec_axis(
+        name = NULL,
+        trans = ~ .,
+        labels = function(x)
+          format(as.yearqtr(x), "%y Q%q")
+      )
+    ) +
+    {if(split == TRUE)facet_wrap( ~ page_producer, nrow = 4, scales = "free_y")}+
+    { if(is.data.frame(labels))geom_text(
+      data = labels ,
+      mapping = aes(
+        x = week_commencing,
+        y = !!sym(y_value),
+        #Inf,
+        label = event
+      ),
+      #nudge_y = 0.1,
+      #hjust   = 0.1,
+      vjust   = -1.0,
+      colour = "black"
+    )}+
+    theme(axis.text.x = element_text(angle = 90)) 
+}
 
 
+
+### Plot visitor traffic
+make_graph(
+  data = nations_traffic,
+  y_value = "visitors_raw",
+  labels = labels,
+  v_line = new_year,
+  y_lab = "Number of Visitors",
+  title = "Visitors to BBC News Nations pages (w/c 2019-03-04 to 2022-09-05)",
+  split = FALSE
+)
+make_graph(
+  data = nations_traffic,
+  y_value = "visitors_raw",
+  labels = labels,
+  v_line = new_year,
+  y_lab = "Number of Visitors",
+  title = "Visitors to BBC News Nations pages (w/c 2019-03-04 to 2022-09-05)",
+  split = TRUE
+)
+
+
+##look at the number of Nations pages being visited that week (minimum 10 visits)
+num_pages<-dbGetQuery(conn, "SELECT DISTINCT week_commencing, page_producer, pages FROM central_insights_sandbox.vb_news_regions_num_pages ORDER BY 1,2 DESC;")
+num_pages %>% head()
+num_pages$week_commencing<- ymd(num_pages$week_commencing)
+num_pages$pages<- as.numeric(num_pages$pages)
+
+labels<- labels %>% left_join(num_pages, by = c('week_commencing', 'page_producer'))
+
+
+###### visitors, given the number of pages######
+visitors_per_pages <- nations_traffic %>%
+  left_join(num_pages, by = c('week_commencing', 'page_producer'))  %>%
+  group_by(week_commencing, page_producer) %>%
+  summarise(visitors_per_pages = visitors_raw / pages) %>% ungroup()
+
+labels<- labels %>% left_join(visitors_per_pages, by = c('week_commencing', 'page_producer'))
+
+
+make_graph(
+  data = visitors_per_pages,
+  y_value = "visitors_per_pages",
+  labels = "",
+  v_line = new_year,
+  y_lab = "Visitors per Pages",
+  title = "Visitors per Pages to BBC News Nations pages (w/c 2019-03-04 to 2022-09-05)",
+  split = TRUE
+)
+  
+
+  # -- how many articles are there a day for england/wales etc
+  # -- are nations promoted more on the homepage?
+  #   -- compareto all bbc traffic
+  # -- ask Emily Wales things
+  
