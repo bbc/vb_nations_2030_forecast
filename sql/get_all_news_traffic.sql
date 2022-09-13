@@ -17,14 +17,15 @@ GRANT SELECT on vb_news_regions_historic_users_all_news to GROUP central_insight
 
 --- backfill table
 INSERT INTO vb_news_regions_historic_users_all_news
-SELECT '<params.run_date>'::date                                                              as week_commencing,
-       count(distinct unique_visitor_cookie_id)                                      as visitors_raw,
-       count(*)                                                                      as requests_raw,
-        round(count(distinct unique_visitor_cookie_id), -4)                           as visitors,
-       count(distinct visit_id)                                                      as visits_raw,
-       round(requests_raw::double precision / visitors_raw, 1)                       as request_per_browser
+SELECT '<params.run_date>'::date                               as week_commencing,
+       count(distinct unique_visitor_cookie_id)                as visitors_raw,
+       count(*)                                                as requests_raw,
+       round(count(distinct unique_visitor_cookie_id), -4)     as visitors,
+       count(distinct dt||visit_id)                                as visits_raw,
+       round(requests_raw::double precision / visitors_raw, 1) as request_per_browser
 FROM s3_audience.audience_activity
-WHERE dt >= '<params.run_date>' AND dt < replace(cast('<params.run_date>'::varchar as date) + 7, '-', '')
+WHERE dt >= '<params.run_date>'
+  AND dt < replace(cast('<params.run_date>'::varchar as date) + 7, '-', '')
   AND destination = 'PS_NEWS'
   AND source = 'Events'      -- set to the event scope
   AND content_action IS NULL -- remove any AV things
@@ -33,7 +34,6 @@ WHERE dt >= '<params.run_date>' AND dt < replace(cast('<params.run_date>'::varch
   AND app_type != 'web'      -- to exclude the unusual data from interactive maps
 GROUP BY 1
 ORDER BY visitors_raw desc
-
 ;
 
 END;
@@ -46,7 +46,7 @@ SELECT  week_commencing,visitors, round(visits_raw,-4) as visits FROM vb_news_re
 SELECT DISTINCT week_commencing  FROM vb_news_regions_historic_users_all_news ORDER BY 1 DESC;*/
 
 
---SELECT DISTINCT week_commencing  FROM vb_news_regions_historic_users_all_news ORDER BY 1 DESC;
+SELECT week_commencing, visitors FROM vb_news_regions_historic_users_all_news ORDER BY 1 asc;
 
 
 
