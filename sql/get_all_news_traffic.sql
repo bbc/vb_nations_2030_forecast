@@ -17,12 +17,12 @@ GRANT SELECT on vb_news_regions_historic_users_all_news to GROUP central_insight
 
 --- backfill table
 INSERT INTO vb_news_regions_historic_users_all_news
-SELECT '<params.run_date>'::date                               as week_commencing,
-       count(distinct unique_visitor_cookie_id)                as visitors_raw,
-       count(*)                                                as requests_raw,
-       round(count(distinct unique_visitor_cookie_id), -4)     as visitors,
-       count(distinct dt||visit_id)                                as visits_raw,
-       round(requests_raw::double precision / visitors_raw, 1) as request_per_browser
+SELECT '<params.run_date>'::date                           as week_commencing,
+       count(distinct unique_visitor_cookie_id)            as visitors_raw,
+       0::int                                              as requests_raw,
+       round(count(distinct unique_visitor_cookie_id), -4) as visitors,
+       0::int                                              as visits_raw,
+       0.0                                                 as request_per_browser
 FROM s3_audience.audience_activity
 WHERE dt >= '<params.run_date>'
   AND dt < replace(cast('<params.run_date>'::varchar as date) + 7, '-', '')
@@ -32,6 +32,7 @@ WHERE dt >= '<params.run_date>'
   AND page_producer NOT ILIKE '%sport%'
   AND page_name != 'keepalive'
   AND app_type != 'web'      -- to exclude the unusual data from interactive maps
+  and visit_id IS NOT NULL   --for DF2
 GROUP BY 1
 ORDER BY visitors_raw desc
 ;
@@ -46,7 +47,7 @@ SELECT  week_commencing,visitors, round(visits_raw,-4) as visits FROM vb_news_re
 SELECT DISTINCT week_commencing  FROM vb_news_regions_historic_users_all_news ORDER BY 1 DESC;*/
 
 
-SELECT week_commencing, visitors FROM vb_news_regions_historic_users_all_news ORDER BY 1 asc;
+--SELECT week_commencing, visitors FROM vb_news_regions_historic_users_all_news ORDER BY 1 asc;
 
 
 
