@@ -78,7 +78,8 @@ labels <-
         '2020-10-19',
         '2021-08-09',
         '2022-08-01',
-        '2020-03-09'
+        '2020-03-09',
+        '2022-09-05'
       )
     ),
     event = c(
@@ -90,7 +91,8 @@ labels <-
       "Welsh national lockdown",
       "A Level results",
       "Euros win",
-      "RI schools close"
+      "ROI schools close",
+      "Queen's death"
     ),
     page_producer = c(
       "England",
@@ -101,10 +103,11 @@ labels <-
       "Wales",
       "England",
       "England",
-      "Northern Ireland"
+      "Northern Ireland",
+      "England"
     )
-  ) %>%  left_join(nations_traffic[, 1:3], by = c("week_commencing", "page_producer"))
-
+  ) %>%  left_join(nations_traffic[, 1:3], by = c("week_commencing", "page_producer")) %>% 
+  arrange(week_commencing)
 labels
 
 ## get lines for Christmas/new year
@@ -121,8 +124,13 @@ make_graph <- function(data, y_value, labels, v_line, title, y_lab, split) {
     ylab(y_lab) +
     xlab("Date") +
     labs(title = title) +
+    {if(split == TRUE) 
     scale_y_continuous(label = comma,
-                       n.breaks = 10) +
+                       limits = ~ c(min(.x), max(.x)*1.2),
+                       n.breaks = 10)
+      else scale_y_continuous(label = comma,
+                              limits = ~ c(min(.x), max(.x)*1.1),
+                              n.breaks = 20)} +
     geom_vline(xintercept = v_line,
                linetype = "dashed",
                color = "grey") +
@@ -150,7 +158,12 @@ make_graph <- function(data, y_value, labels, v_line, title, y_lab, split) {
       vjust   = -1.0,
       colour = "black"
     )}+
-    theme(axis.text.x = element_text(angle = 90)) 
+    theme(axis.text.x = element_text(angle = 90),
+          panel.grid.major.y = element_line( size=.1, color="grey" ) ,
+          panel.grid.major.x = element_blank(),
+          panel.grid.minor.x = element_blank(),
+          panel.grid.minor.y = element_blank()
+          )
 }
 
 
@@ -168,7 +181,7 @@ make_graph(
 make_graph(
   data = nations_traffic,
   y_value = "visitors_raw",
-  labels = labels,
+  labels = "",
   v_line = new_year,
   y_lab = "Number of Visitors",
   title = "Visitors to BBC News Nations pages (w/c 2019-03-04 to 2022-09-05)",
@@ -184,6 +197,15 @@ num_pages$pages<- as.numeric(num_pages$pages)
 
 labels<- labels %>% left_join(num_pages, by = c('week_commencing', 'page_producer'))
 
+make_graph(
+  data = num_pages,
+  y_value = "pages",
+  labels = labels,
+  v_line = new_year,
+  y_lab = "Pages",
+  title = "Pages to BBC News Nations pages (w/c 2019-03-04 to 2022-09-05)",
+  split = TRUE
+)
 
 ###### visitors, given the number of pages######
 visitors_per_pages <- nations_traffic %>%
@@ -203,10 +225,91 @@ make_graph(
   title = "Visitors per Pages to BBC News Nations pages (w/c 2019-03-04 to 2022-09-05)",
   split = TRUE
 )
-  
 
-  # -- how many articles are there a day for england/wales etc
-  # -- are nations promoted more on the homepage?
-  #   -- compareto all bbc traffic
-  # -- ask Emily Wales things
+
+
+###################### visitors to all of BBC News ######################
+
+all_news<- dbGetQuery(conn, "SELECT week_commencing, visitors FROM central_insights_sandbox.vb_news_regions_historic_users_all_news ORDER BY 1 asc;")
+all_news %>% head()
+all_news$week_commencing<- ymd(all_news$week_commencing)
+all_news$visitors<- as.numeric(all_news$visitors)
+
+
+all_labels <- labels %>% rbind(
+  data.frame(
+    week_commencing  = ymd(c('2020-11-02','2022-02-21', '2019-12-09', '2021-12-13',
+                             '2022-07-04')),
+    event = c('US Election', 'Russia invades Ukraine', "UK Election", "Omicron restrictions", "Boris resigns"),
+    page_producer = c('England','England','England','England', "England"),
+    visitors_raw = c(0,0,0,0,0),
+    pages = c(0,0,0,0,0),
+    visitors_per_pages = c(0,0,0,0,0)
+  )) %>%
+  left_join(all_news, by = "week_commencing")
+all_labels
+all_news$page_producer <-"England" ## just add this so i can use the graph function
+
+
+make_graph(
+  data = all_news,
+  y_value = "visitors",
+  labels = all_labels,
+  v_line = new_year,
+  y_lab = "Visitors",
+  title = "Visitors to all BBC News pages (w/c 2019-03-04 to 2022-09-05)",
+  split = FALSE
+)
+
+
+###### N&R visitors per all news visitors
+nations_traffic %>% head()
+all_news %>% head()
+
+nations_perc<-
+all_news %>% 
+  mutate(all_visitors = visitors) %>%
+  select(-visitors, -page_producer) %>% 
+  left_join(nations_traffic %>% select(week_commencing,page_producer, visitors_raw ), 
+            by = "week_commencing") %>% 
+  mutate(nations_perc = round(100*visitors_raw/all_visitors,1))
+nations_perc %>% head()
+
+all_labels_perc <-
+  all_labels %>%
+  select(week_commencing, event, page_producer)  %>%
+  rbind(data.frame(
+    week_commencing  = ymd(c('2021-08-09')),
+    event = c('Devon shooting' ),
+    page_producer = c('England')
+  )) %>% 
+  left_join(nations_perc, by = c('week_commencing', "page_producer"))
+
+all_labels_perc %>% 
+  filter(page_producer !='England' | event %in% c('A Level Results', "Euros win", "Sarah Everard murder", "Devon shooting") ) %>% 
+  select(week_commencing, page_producer, event, nations_perc)
+
+
+make_graph(
+  data = nations_perc,
+  y_value = "nations_perc",
+  labels = all_labels_perc %>% 
+    filter(page_producer !='England' | event %in% c('A Level Results', "Euros win", "Sarah Everard murder", "Devon shooting") ) %>% 
+    select(week_commencing, page_producer, event, nations_perc),
+  v_line = new_year,
+  y_lab = "Percentage of nations traffic to all visitors. ",
+  title = "Percentage of nations traffic to all visitors on BBC News pages (w/c 2019-03-04 to 2022-09-05)",
+  split = TRUE
+)
+
+# -- how many articles are there a day for england/wales etc
+# -- are nations promoted more on the homepage?
+#   -- compareto all bbc traffic
+# -- ask Emily Wales things
+## linear trend, then try logistic fits
+## raw visitors?
+## visitors compare to overall visitors?
+## not arima models
+
+
   
