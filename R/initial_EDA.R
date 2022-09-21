@@ -116,9 +116,24 @@ new_year<-ymd(c("2020-01-01","2021-01-01","2022-01-01"))
 
 
 ############## function so as to not repeat code for similar graphs ##########
-make_graph <- function(data, y_value, labels, v_line, title, y_lab, split) {
-  ggplot(data = data, aes(x = week_commencing, colour = page_producer)) +
-    geom_line(aes(y = !!sym(y_value))) +
+make_graph <- function(data, y_value, labels, v_line, title, y_lab, split, avg_label) {
+data$year<-year(data$week_commencing)
+avg_traffic<-
+  data %>% #head() %>%
+    group_by(page_producer, year) %>%
+    mutate(
+      median_visitors = median(!!sym(y_value)),
+      mean_visitors = mean(!!sym(y_value))
+    ) %>%
+    select(week_commencing,
+           page_producer,
+           median_visitors,
+           mean_visitors) 
+
+  print(avg_traffic)
+  
+ggplot(data = data, aes(x = week_commencing, colour = page_producer)) +
+    geom_point(aes(y = !!sym(y_value))) +
     {if(is.data.frame(labels))geom_point(data = labels,
                aes(y = !!sym(y_value), x = week_commencing))} +
     ylab(y_lab) +
@@ -163,10 +178,49 @@ make_graph <- function(data, y_value, labels, v_line, title, y_lab, split) {
           panel.grid.major.x = element_blank(),
           panel.grid.minor.x = element_blank(),
           panel.grid.minor.y = element_blank()
-          )
+          )+
+  ### add averages line and text
+  {if(avg_label ==TRUE)geom_text(
+    data = avg_traffic %>% filter(
+      week_commencing == min(avg_traffic$week_commencing) |
+        week_commencing == max(avg_traffic$week_commencing)
+    ) %>%
+      mutate(median = signif(median_visitors,2)),
+    mapping = aes(
+      x = week_commencing,
+      y = median,
+      #Inf,
+      label = comma(median),
+      colour = page_producer
+    ),
+    nudge_y = 0.1,
+    #hjust   = 0.1,
+    vjust   = 1.5
+  )}+
+  geom_line(data = avg_traffic,
+            aes(x =week_commencing, y = median_visitors, colour = page_producer ),
+            linetype = "dashed"
+  )
+
+
 }
 
-
+##### find averages per year
+# nations_traffic %>% #head() %>%
+#   group_by(page_producer, year) %>%
+#   mutate(
+#     median_visitors = median(visitors_raw),
+#     mean_visitors = mean(visitors_raw)
+#   ) %>%
+#   select(week_commencing,
+#          page_producer,
+#          median_visitors,
+#          mean_visitors) %>%
+#   filter(
+#     week_commencing == min(avg_traffic$week_commencing) |
+#       week_commencing == max(avg_traffic$week_commencing)
+#   ) %>% 
+#   mutate(median = round(median_visitors, -5))
 
 ### Plot visitor traffic
 make_graph(
@@ -176,8 +230,12 @@ make_graph(
   v_line = new_year,
   y_lab = "Number of Visitors",
   title = "Visitors to BBC News Nations pages (w/c 2019-03-04 to 2022-09-05)",
-  split = FALSE
+  split = FALSE,
+  avg_label = TRUE
 )
+
+
+
 make_graph(
   data = nations_traffic,
   y_value = "visitors_raw",
@@ -185,7 +243,8 @@ make_graph(
   v_line = new_year,
   y_lab = "Number of Visitors",
   title = "Visitors to BBC News Nations pages (w/c 2019-03-04 to 2022-09-05)",
-  split = TRUE
+  split = TRUE,
+  avg_label = FALSE
 )
 
 
@@ -194,17 +253,19 @@ num_pages<-dbGetQuery(conn, "SELECT DISTINCT week_commencing, page_producer, pag
 num_pages %>% head()
 num_pages$week_commencing<- ymd(num_pages$week_commencing)
 num_pages$pages<- as.numeric(num_pages$pages)
+num_pages$year<-year(num_pages$week_commencing)
 
 labels<- labels %>% left_join(num_pages, by = c('week_commencing', 'page_producer'))
 
 make_graph(
   data = num_pages,
   y_value = "pages",
-  labels = labels,
+  labels = "",
   v_line = new_year,
   y_lab = "Pages",
-  title = "Pages to BBC News Nations pages (w/c 2019-03-04 to 2022-09-05)",
-  split = TRUE
+  title = "Number of BBC News Nations pages visited (w/c 2019-03-04 to 2022-09-05)",
+  split = TRUE,
+  avg_label = TRUE
 )
 
 ###### visitors, given the number of pages######
@@ -212,6 +273,7 @@ visitors_per_pages <- nations_traffic %>%
   left_join(num_pages, by = c('week_commencing', 'page_producer'))  %>%
   group_by(week_commencing, page_producer) %>%
   summarise(visitors_per_pages = visitors_raw / pages) %>% ungroup()
+
 
 labels<- labels %>% left_join(visitors_per_pages, by = c('week_commencing', 'page_producer'))
 
@@ -223,7 +285,8 @@ make_graph(
   v_line = new_year,
   y_lab = "Visitors per Pages",
   title = "Visitors per Pages to BBC News Nations pages (w/c 2019-03-04 to 2022-09-05)",
-  split = TRUE
+  split = TRUE,
+  avg_label = TRUE
 )
 
 
@@ -236,17 +299,30 @@ all_news$week_commencing<- ymd(all_news$week_commencing)
 all_news$visitors<- as.numeric(all_news$visitors)
 
 
-all_labels <- labels %>% rbind(
+
+all_labels <- labels %>% select(week_commencing,event, page_producer) %>% 
+rbind(
   data.frame(
-    week_commencing  = ymd(c('2020-11-02','2022-02-21', '2019-12-09', '2021-12-13',
-                             '2022-07-04')),
-    event = c('US Election', 'Russia invades Ukraine', "UK Election", "Omicron restrictions", "Boris resigns"),
-    page_producer = c('England','England','England','England', "England"),
-    visitors_raw = c(0,0,0,0,0),
-    pages = c(0,0,0,0,0),
-    visitors_per_pages = c(0,0,0,0,0)
-  )) %>%
-  left_join(all_news, by = "week_commencing")
+    week_commencing  = ymd(
+      c(
+        '2020-11-02',
+        '2022-02-21',
+        '2019-12-09',
+        '2021-12-13',
+        '2022-07-04'
+      )
+    ),
+    event = c(
+      'US Election',
+      'Russia invades Ukraine',
+      "UK Election",
+      "Omicron restrictions",
+      "Boris resigns"
+    ),
+    page_producer = c('England', 'England', 'England', 'England', "England")
+  )
+) %>%
+  left_join(all_news, by = "week_commencing") %>% arrange(week_commencing)
 all_labels
 all_news$page_producer <-"England" ## just add this so i can use the graph function
 
@@ -257,8 +333,9 @@ make_graph(
   labels = all_labels,
   v_line = new_year,
   y_lab = "Visitors",
-  title = "Visitors to all BBC News pages (w/c 2019-03-04 to 2022-09-05)",
-  split = FALSE
+  title = "Visitors to all BBC News pages (w/c 2019-03-04 to 2022-09-12)",
+  split = FALSE,
+  avg_label = TRUE
 )
 
 
@@ -297,9 +374,10 @@ make_graph(
     filter(page_producer !='England' | event %in% c('A Level Results', "Euros win", "Sarah Everard murder", "Devon shooting") ) %>% 
     select(week_commencing, page_producer, event, nations_perc),
   v_line = new_year,
-  y_lab = "Percentage of nations traffic to all visitors. ",
-  title = "Percentage of nations traffic to all visitors on BBC News pages (w/c 2019-03-04 to 2022-09-05)",
-  split = TRUE
+  y_lab = "Percentage (%) ",
+  title = "Nations visitor numbers as a percentage of all BBC News visitors (w/c 2019-03-04 to 2022-09-05)",
+  split = TRUE,
+  avg_label = TRUE
 )
 
 # -- how many articles are there a day for england/wales etc
