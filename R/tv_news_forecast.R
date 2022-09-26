@@ -41,24 +41,22 @@ clean_data <- data %>% mutate(
 
 
 #######  EDA #########
-## get simple axes, with min and max dates
-temp <- clean_data %>%
-  group_by(year, quarter) %>%
-  summarise(quarter_min = min(week_commencing)) %>%
-  ungroup() %>%
-  select(quarter_min) %>%
-  rbind(clean_data %>% summarise(quarter_min = max(week_commencing)))%>% as.list()
-
-x_axis_dates <- temp$quarter_min 
-x_axis_dates %>% length()
-rm(temp)
-
-## get lines for Christmas/new year
-new_year<-ymd(c("2017-01-01","2018-01-01","2019-01-01",
-  "2020-01-01","2021-01-01","2022-01-01"))
 
 ###### function to make graph
 make_plot <- function(data, y_lab, y_value, split) {
+  ## get simple axes, with min and max dates
+  temp <- data %>%
+    group_by(year, quarter) %>%
+    summarise(quarter_min = min(week_commencing)) %>%
+    ungroup() %>%
+    select(quarter_min) %>%
+    rbind(data %>% summarise(quarter_min = max(week_commencing)))%>% as.list()
+  
+  x_axis_dates <- temp$quarter_min 
+  rm(temp)
+  
+  ## get lines for new year
+  new_year<<- data %>% group_by(year) %>% summarise(week_commencing = min(week_commencing))
   
   avg_traffic <<-
     data %>% #head() %>%
@@ -89,7 +87,7 @@ make_plot <- function(data, y_lab, y_value, split) {
       else scale_y_continuous(label = comma,
                               limits = ~ c(min(.x), max(.x)*1.1),
                               n.breaks = 20)} +
-    geom_vline(xintercept = new_year,
+    geom_vline(xintercept = new_year$week_commencing,
                linetype = "dashed",
                color = "grey") +
     scale_x_date(
@@ -119,10 +117,11 @@ make_plot <- function(data, y_lab, y_value, split) {
 }
 
 
+
 ### Basic plot
 make_plot(
   data = clean_data,
-  y_lab = paste0("Viewers to BBC News ",england$region," Bulletin (w/c ",clean_data$week_commencing %>% min()," to ",clean_data$week_commencing %>% max(),")"),
+  y_lab = paste0("Viewers to BBC News ",clean_data$region," Bulletin (w/c ",clean_data$week_commencing %>% min()," to ",clean_data$week_commencing %>% max(),")"),
   y_value = 'viewers',
   split = TRUE
 )
@@ -245,7 +244,7 @@ pacf(diff(log(data_ts)))#PACF There is one main significant spike, then one just
 ##within the blue lines statistically we can't determine as being different from zero so we use anything outside the blue lines
 
 ## this function can automatically suggest dpq
-auto.arima()## gives you an automatic valur
+auto.arima()## gives you an automatic value
 
 
 ################# Fit the model #################
@@ -255,28 +254,153 @@ fit <- arima(log(data_ts), c(2, 1, 2),
              seasonal = list(order = c(2, 1, 2), 
                              period = 52.17857),
              method="CSS")
-pred <- predict(fit, n.ahead = 300) #300 gives us the next 6 years 
+pred <- predict(fit, n.ahead = 438) #438 gives until the end of 2030
 
-ts.plot(data_ts,2.718^pred$pred, log = "y", lty = c(1,3), xlab="time")
-ts.plot(2.718^pred$pred, log = "y", lty = c(1,3), xlab="time")
-plot(data_ts)
+ts.plot(2.718^pred$pred, log = "y", lty = c(1,3), xlab="time", ylab = "viewers (mil)")
+ts.plot(data_ts, 2.718^pred$pred, log = "y", lty = c(1,3), xlab="time",ylab = "viewers (mil)")
+#plot(data_ts)
 
 #Get the predicted values and make into a data frame to plot with ggplot
 pred_df<- data.frame(pred)
-pred_df<-pred_df %>% mutate(num_clicks = 2.718^pred)
+pred_df<-pred_df %>% mutate(viewers = 2.718^pred)
 
-feb_march_dates<- data %>% filter(dt >= 20200201 & dt < 20200401 & attribute != 'rec_content') %>%
-  select(dt,date,month_name) %>% unique()
+## get a list of w/c dates
+week_commencing <- seq(x_axis_dates[length(x_axis_dates)]+7, by = "week", length.out = nrow(pred_df))
+week_commencing %>% min()
+week_commencing %>% max()
 
-dataPrediction <- 
-  feb_march_dates %>% 
-  cbind(pred_df %>% select(num_clicks))
+england %>% head()
 
-dataPrediction<-dataPrediction %>% bind_rows(data %>% 
-                                               filter(dt >= 20200101 & dt < 20200201 & attribute != 'rec_content')%>%
-                                               select(dt,date,month_name,num_clicks)) 
-dataPrediction$month_name<- factor(dataPrediction$month_name, levels = c("January", "February", "March"))
-dataPrediction$date<- as.Date(dataPrediction$date)
+## make a df to plot with ggplot
+forecast_data <-
+  data.frame(week_commencing) %>%
+  cbind(pred_df %>% select(viewers)) %>%
+  mutate(
+    quarter = quarter(week_commencing),
+    year = year(week_commencing),
+    week_commencing = ymd(week_commencing),
+    viewers = as.numeric(viewers),
+    actual_pred = 'predicted'
+  ) %>%
+  select(year, quarter, week_commencing, viewers,actual_pred) %>%
+  rbind(england %>% select(year, quarter, week_commencing, viewers) %>% mutate(actual_pred = 'actual')) %>%
+  arrange(week_commencing)
+  
+
+
+########### make forecast plot ##########
+make_forecast_plot <- function(data, y_lab,title, y_value, split, colour_scheme) {
+  ## get simple axes, with min and max dates
+  temp <- data %>%
+    group_by(year) %>%
+    summarise(year_min = min(week_commencing)) %>%
+    ungroup() %>%
+    select(year_min) %>%
+    rbind(data %>% summarise(year_min = max(week_commencing)))%>% as.list()
+  
+  x_axis_dates <- temp$year_min 
+  rm(temp)
+  
+  ## get lines for new year
+  new_year<<- data %>% group_by(year) %>% summarise(week_commencing = min(week_commencing))
+  
+  avg_traffic <<-
+    data %>% #head() %>%
+    group_by(year, region) %>%
+    mutate(median_viewers = median(!!sym(y_value))) %>%
+    select(year,
+           week_commencing,
+           region,
+           median_viewers)
+  
+  print(
+    avg_traffic %>%
+      select(year, median_viewers) %>% unique() %>%
+      mutate(median_viewers = signif(median_viewers, 2)) %>%
+      ungroup() %>%
+      mutate(previous = paste0(round(
+        100 * (median_viewers - lag(median_viewers, order_by = year)) / median_viewers, 1
+      ), "%")
+      )
+  )
+  
+  ggplot(data = data, aes(x = week_commencing)) +
+    geom_point(aes(y = viewers,  colour = actual_pred)) +
+    ylab(y_lab) +
+    xlab("Date") +
+    labs(title = title) +
+    scale_y_continuous(
+      label = comma,
+      limits = ~ c(min(.x), max(.x) * 1.1),
+      n.breaks = 20
+    ) +
+    scale_color_manual(values=c(colour_scheme$actual,colour_scheme$pred ))+
+    geom_vline(
+      xintercept = new_year$week_commencing,
+      linetype = "dashed",
+      color = "grey"
+    ) +
+    scale_x_date(
+      labels = date_format("%Y-%m-%d"),
+      breaks = x_axis_dates,
+      sec.axis = sec_axis(
+        name = NULL,
+        breaks = x_axis_dates,
+        trans = ~ .,
+        labels = date_format("%Y")
+      )
+    ) +
+    facet_wrap( ~ region, nrow = 4, scales = "free_y") +
+    theme(
+      axis.text.x = element_text(angle = 90),
+      panel.grid.major.y = element_line(size = .1, color = "grey") ,
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      panel.grid.minor.y = element_blank(),
+      legend.title=element_blank()
+    ) +
+    geom_line(
+      data = avg_traffic ,
+      aes(x = week_commencing, y = median_viewers),
+      linetype = "dashed",
+      colour = "black"
+    )
+  
+  # return(plot)
+}
+
+
+# #get default colour codes already used and find a lightened version for the predicted value
+# colours <- hue_pal()(4)
+# 
+# nation_colours <-
+#   sapply(colours, function(x) {
+#     colorRampPalette(c(x, "#FFFFFF"))(10)
+#   }) %>%
+#   as.data.frame() %>%
+#   filter(row_number() == 5) %>%
+#   gather(key = actual.color, value = pred.color) %>%
+#   cbind(data.frame(nation = c('England', "NI", "Scotland", "Wales")))
+# 
+# x <- nation_colours %>% filter(nation == 'England')
+# x$actual.color
+# x$pred.color
+
+## plot forecast
+make_forecast_plot(
+  data = forecast_data %>% mutate(region = 'England'),
+  title = paste0("Predicted viewers to local BBC News from ",
+                 week_commencing %>% min(),
+                 " to ",
+                 week_commencing %>% max()
+                 ),
+  y_lab = "Weekly viewers (million)",
+  y_value = 'viewers',
+  split = TRUE,
+  colour_scheme = nation_colours %>% filter(nation =='England')
+)
+
+
 
 
 
