@@ -8,15 +8,12 @@ CREATE TABLE vb_news_regions_historic_users_all_news
     visitors_raw        bigint,
     requests_raw        bigint,
     visitors            bigint,
-    visits_raw          bigint,
     request_per_visitor double precision
 ) DISTSTYLE AUTO;*/
 
 GRANT ALL on vb_news_regions_historic_users_all_news to vicky_banks with grant option;
 GRANT SELECT on vb_news_regions_historic_users_all_news to GROUP central_insights;
 
-ALTER TABLE vb_news_regions_historic_users_all_news
-DROP visits_raw;
 
 --- backfill table
 INSERT INTO vb_news_regions_historic_users_all_news
@@ -51,7 +48,4 @@ SELECT DISTINCT week_commencing  FROM vb_news_regions_historic_users_all_news OR
 
 --SELECT week_commencing, visitors FROM vb_news_regions_historic_users_all_news ORDER BY 1 asc;
 --DELETE FROM vb_news_regions_historic_users_all_news WHERE week_commencing = '20210125';
-
-
-
 
