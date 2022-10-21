@@ -37,7 +37,7 @@ radio_data <-
   map(read_excel, path = path)
 names(radio_data)<- tolower(gsub(' ','_', excel_sheets(path)))
 
-# Bring the dataframes to the global environment
+  # Bring the dataframes to the global environment
 #list2env(radio_data ,.GlobalEnv)
 
 # df<-eng_3mw
@@ -78,8 +78,7 @@ clean_data <- function(df, df_name) {
            full_join(covid_factor, by = c("quarter", "year", "year_quarter")) %>% 
            replace(is.na(.),0) %>% 
            arrange(year_quarter) %>% 
-           mutate(source = df_name) %>% 
-           filter(year <2020)
+           mutate(source = df_name)
          ,
          envir = .GlobalEnv
          ) ## create a df with that name and the periods as a column
@@ -144,7 +143,9 @@ all_data %>% head()
 new_year<- all_data %>% filter(quarter == 1) %>% select(year_quarter) %>% unique()
 
 ###graph
-ggplot(data = all_data, aes(x = year_quarter, y = reach000s, colour = source))+
+ggplot(data = all_data 
+       , 
+       aes(x = year_quarter, y = reach000s, colour = source))+
   geom_point()+
   scale_y_continuous(
     label = comma,
@@ -188,8 +189,12 @@ nation_colours <-
 england_3mw_bbc %>% head()
 
 make_lm <- function(raw_data, forecast_measure, data_source_name, colour_scheme) {
-
-  raw_data<-raw_data %>% mutate(log_measure = log(!!sym(forecast_measure)))
+  nation = sub('_.*', '' , raw_data$source %>% unique())
+  
+  print(nation) 
+  post_covid_data<<-raw_data %>% filter( year >=2020) %>% filter(period !=0)
+  raw_data<- raw_data %>% mutate(log_measure = log(!!sym(forecast_measure))) %>% filter( year <2020)
+  
   
   model <- lm(data = raw_data,
               formula = log_measure ~ year + poly(quarter, 3) + covid)
@@ -227,35 +232,47 @@ make_lm <- function(raw_data, forecast_measure, data_source_name, colour_scheme)
     ) %>%
     arrange(year_quarter) %>%
     mutate(source = raw_data$source %>% unique()) %>%
-    mutate(nation = sub('_.*', '' , source)) %>% 
-    mutate(test = round(!!sym(forecast_measure),0) )
+    mutate(nation = sub('_.*', '' , source))
   
   
+  ### get percentage change without the real post covid data only the forecast
   perc_change <<-
     actual_forecast %>%
     group_by(year) %>%
     summarise({{forecast_measure}} := mean(!!sym(forecast_measure))) %>%
     mutate(perc_change = round(100 * (!!sym(forecast_measure) / first(!!sym(forecast_measure)) - 1), 2)) %>% 
-    mutate(perc_change = formattable(perc_change, digits = 1, format = 'f')) %>% 
+    mutate(perc_change = formattable(perc_change, digits = 0, format = 'f')) %>% 
     left_join(actual_forecast %>%  group_by(year) %>% summarise(year_quarter = min(year_quarter)), by = "year")
   
-  print(perc_change %>% select(-year_quarter) )
+  
 
+  ## add in the post covid real data
+  actual_forecast<<- 
+    actual_forecast %>% 
+    rbind( post_covid_data %>%
+             select(quarter, year, year_quarter, covid, !!sym(forecast_measure)) %>%
+             mutate({{forecast_measure}} := round(!!sym(forecast_measure),0)) %>%
+             mutate(actual_pred = 'actual') %>% 
+             mutate(source = raw_data$source %>% unique()) %>%
+             mutate(nation = sub('_.*', '' , source))
+           ) %>% 
+    arrange(year,quarter)
+  
 
-  ggplot(data = actual_forecast, aes(x = year_quarter,
+ forecast_graph<- ggplot(data = actual_forecast, aes(x = year_quarter,
                                       y = !!sym(forecast_measure),
                                       colour = actual_pred)) +
     {if(grepl("BBC",data_source_name)) geom_point(shape = 16)
       else geom_point(shape = 17)}+
     #geom_point(shape = 16) +
     scale_y_continuous(
-      label = scales::number_format(accuracy = 1),
+      label = label_comma(accuracy = .1),
       limits = ~ c(0, max(.x) * 1.1),
       n.breaks = 10
     ) +
     scale_x_discrete(label = actual_forecast$year %>% unique(),
                      breaks = actual_forecast$year_quarter[actual_forecast$quarter ==
-                                                                      1]) +
+                                                                      1] %>% unique() ) +
     facet_wrap(~ nation, scales = "free_y") +
     theme(
       axis.text.x = element_text(angle = 90),
@@ -278,14 +295,38 @@ make_lm <- function(raw_data, forecast_measure, data_source_name, colour_scheme)
     data = perc_change %>% filter(year %in% c(2019,2023, 2027,2030)) ,
     mapping = aes(
       #Inf,
-      label = paste0(round(perc_change,0),"%")
+      label = paste0(signif(perc_change ,2),"%")
     ),
     #nudge_y = 0.1,
     #hjust   = 0.1,
     vjust   = 1.0,
     colour = "black"
   )
+  
 
+  qrt_avg_2015 <- actual_forecast %>%
+    filter(year == 2015) %>%
+    summarise(quarter_avg = mean(!!sym(forecast_measure))) %>% as.numeric()
+  
+  #final_data
+  final_data<<-
+    actual_forecast %>%
+    select(year, quarter, nation, actual_pred,!!sym(forecast_measure)) %>%
+    mutate(perc_change = signif(
+      round(100 * ( (!!sym(forecast_measure) / qrt_avg_2015)-1 ), 0), 2))
+  
+  
+  write.csv( final_data ,
+    file = paste0("./forecasts/radio/",
+                  nation,'_',
+                  sub('.*_', '' , raw_data$source %>% unique()),"_",
+                  forecast_measure,".csv" 
+                  ),
+    row.names = FALSE,
+    col.names = TRUE
+             )
+  
+  print(forecast_graph)
 }
 
 ### England
@@ -294,7 +335,9 @@ make_lm(
   forecast_measure = "reach000s",
   data_source_name = "BBC Local Radio",
   colour_scheme = nation_colours %>% filter(nation =='england')
+  
 )
+
 make_lm(
   raw_data = england_3mw_commercial,
   forecast_measure = "reach000s",
@@ -349,5 +392,67 @@ make_lm(
 )
 
 
+
+############ comparison to ARIMA ############
+library(tseries)
+library(urca)
+library(forecast)
+england_3mw_bbc %>% head()
+
+## make time series
+data_ts<<-ts(england_3mw_bbc$reach000s, 
+             freq= 4, ## quarterly
+             start=ymd('2015-01-01')
+)
+## simple look
+plot(data_ts)
+abline(reg=lm(data_ts~time(data_ts))) 
+##decompose
+plot(decompose(data_ts))
+
+## stationary?
+data_ts %>% ur.kpss() %>% summary()
+data_ts %>% log() %>% ur.kpss() %>% summary() 
+
+##differencing?
+ndiffs(data_ts%>% log()) #1 
+
+## stationary?
+data_ts %>% log() %>% diff() %>% ur.kpss() %>% summary()
+
+## look
+range = data_ts %>% log() %>% diff() %>% max() -data_ts %>% log() %>% diff()%>% min()
+middle = data_ts %>% log()%>% diff() %>% min() +0.5*range
+plot(data_ts %>% log() %>% diff())
+abline(h = middle, col = "red")
+
+## Seasonality?
+data_ts %>% log() %>% nsdiffs() ##0
+
+##ACF and PACF
+acf(data_ts%>% log() %>% diff()) # 2
+pacf(data_ts %>% log() %>% diff())# 1
+
+### model
+fit <- forecast::Arima(log(data_ts), order  = c(2,1,1),
+                       seasonal = list(order = c(2, 1, 0), period =4),
+                       method = 'CSS')
+fit
+checkresiduals(fit)
+pred <- predict(fit, n.ahead = 30)
+
+ts.plot(2.718^pred$pred, log = "y", lty = c(1,3), xlab="time", ylab = "viewers (mil)")
+ts.plot(data_ts, 2.718^pred$pred, log = "y", lty = c(1,3), xlab="time",ylab = "viewers (mil)")
+
+### automatic model
+fit_auto <- auto.arima(log(data_ts))
+fit_auto ##suggests 0,1,1 
+checkresiduals(fit_auto) ## residuals are white noise.
+
+pred_auto <- predict(fit_auto, n.ahead = 30)
+
+ts.plot(2.718^pred_auto$pred, log = "y", lty = c(1,3), xlab="time", ylab = "viewers (mil)")
+ts.plot(data_ts, 2.718^pred_auto$pred, log = "y", lty = c(1,3), xlab="time",ylab = "viewers (mil)")
+##just plots flat
 
 
