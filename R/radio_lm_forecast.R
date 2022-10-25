@@ -143,7 +143,7 @@ all_data %>% head()
 new_year<- all_data %>% filter(quarter == 1) %>% select(year_quarter) %>% unique()
 
 ###graph
-ggplot(data = all_data 
+ggplot(data = all_data  %>% filter(grepl("bbc",source))
        , 
        aes(x = year_quarter, y = reach000s, colour = source))+
   geom_point()+
@@ -159,8 +159,8 @@ ggplot(data = all_data
     panel.grid.major.x = element_blank(),
     panel.grid.minor.x = element_blank(),
     panel.grid.minor.y = element_blank(),
-    legend.title=element_blank()#,
-    #legend.position="none"
+    legend.title=element_blank(),
+    legend.position="none"
   ) +
   labs(title = "RAJAR local radio listeners") +
   geom_vline(
@@ -263,8 +263,7 @@ make_lm <- function(raw_data, forecast_measure, data_source_name, colour_scheme)
                                       y = !!sym(forecast_measure),
                                       colour = actual_pred)) +
     {if(grepl("BBC",data_source_name)) geom_point(shape = 16)
-      else geom_point(shape = 17)}+
-    #geom_point(shape = 16) +
+      else geom_point(shape = 17) } +
     scale_y_continuous(
       label = label_comma(accuracy = .1),
       limits = ~ c(0, max(.x) * 1.1),
@@ -309,25 +308,50 @@ make_lm <- function(raw_data, forecast_measure, data_source_name, colour_scheme)
     summarise(quarter_avg = mean(!!sym(forecast_measure))) %>% as.numeric()
   
   #final_data
-  final_data<<-
+  final_data<-
     actual_forecast %>%
     select(year, quarter, nation, actual_pred,!!sym(forecast_measure)) %>%
     mutate(perc_change = signif(
-      round(100 * ( (!!sym(forecast_measure) / qrt_avg_2015)-1 ), 0), 2))
+      round(100 * ( (!!sym(forecast_measure) / qrt_avg_2015)-1 ), 0), 2)) %>% 
+    mutate({{forecast_measure}} := signif(!!sym(forecast_measure),2) )
   
   
   write.csv( final_data ,
     file = paste0("./forecasts/radio/",
-                  nation,'_',
+                  nation,'_quarter_',
                   sub('.*_', '' , raw_data$source %>% unique()),"_",
                   forecast_measure,".csv" 
                   ),
-    row.names = FALSE,
-    col.names = TRUE
+    row.names = FALSE
              )
+  
+ 
+  write.csv(perc_change %>% select(-year_quarter) %>% 
+              mutate({{forecast_measure}} := signif(!!sym(forecast_measure),2) )
+            ,
+             file = paste0("./forecasts/radio/",
+                           nation,'_annual_',
+                           sub('.*_', '' , raw_data$source %>% unique()),"_",
+                           forecast_measure,".csv" 
+             ),
+             row.names = FALSE
+  )
+  
+  final_data %>% 
+    filter(year > 2020 &year <= 2022) %>% 
+    select(-nation) %>% 
+    pivot_wider(names_from = actual_pred,
+                values_from = c({{forecast_measure}}, "perc_change"), names_sep="_"
+    ) %>% 
+    drop_na() %>% 
+    print()
   
   print(forecast_graph)
 }
+
+
+
+
 
 ### England
 make_lm(
