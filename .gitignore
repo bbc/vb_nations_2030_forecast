@@ -63,3 +63,5 @@ renv/library/
 renv/*.ignore
 
 *.csv
+
+*.jpg
