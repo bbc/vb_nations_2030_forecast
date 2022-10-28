@@ -65,3 +65,6 @@ renv/*.ignore
 *.csv
 
 *.jpg
+*.pptx
+*.zip
+*.xlsx
