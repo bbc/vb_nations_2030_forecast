@@ -16,18 +16,28 @@ theme_set(theme_classic())
 ###### functions ######
 ### round up/down to nearest value for the axes limits
 round_any <- function(x, accuracy, func){func(x/ accuracy) * accuracy}
+getwd()
 
 #### read in data
-data <-
-  read.csv("../tv_news_data/England 000 reach_TV_Graph_data.csv") %>%
-  rbind(read.csv("../tv_news_data/Wales 000 reach_TV_Graph_data.csv")) %>%
-  rbind(read.csv("../tv_news_data/Scotland 000 reach_TV_Graph_data.csv")) %>%
-  rbind(read.csv("../tv_news_data/NI 000 reach_TV_Graph_data.csv")) %>% 
-  rbind("../tv_news_data/2022/England 000 reach_TV_Graph_data.csv") %>%
-  rbind(read.csv("../tv_news_data/2022/Wales 000 reach_TV_Graph_data.csv")) %>%
-  rbind(read.csv("../tv_news_data/2022/Scotland 000 reach_TV_Graph_data.csv")) %>%
-  rbind(read.csv("../tv_news_data/2022/NI 000 reach_TV_Graph_data.csv")) %>% 
-  distinct()
+home_dir<-"/Users/banksv03/Documents/Projects/DS/vb_nations_2030_forecast"
+files<-grep(pattern = "(?=.*csv)(?=.*000 reach)(?=.*TV)" , 
+            x = list.files(path = paste0(home_dir,"/data/tv_news_data") ), 
+            value = TRUE, perl = TRUE)
+files<-files[!grepl('UK',files) ]
+
+##get the new 2022files
+files_2022<-grep(pattern = "(?=.*csv)(?=.*000 reach)(?=.*TV)" , 
+            x = paste0("2022/",list.files(path = paste0(home_dir,"/data/tv_news_data/2022") )), 
+            value = TRUE, perl = TRUE)
+files_2022<-files_2022[!grepl('UK',files_2022) ]
+
+### read them all in and put into one df
+data <- do.call(rbind, lapply(files %>% append(files_2022),
+                              function(x)
+                                read.csv(
+                                  file = paste0(home_dir, "/data/tv_news_data/" , x)
+                                )))
+data<-data %>% distinct()
 data$Calc.Weighted.Metrics<-as.numeric(gsub(",","", data$Calc.Weighted.Metrics))
 
 
@@ -134,7 +144,7 @@ make_plot(
 
 ### account for covid with scale factor ###
 
-covid_factor<- read.csv("Covid trend data.csv")
+covid_factor<- read.csv(paste0(home_dir, "/data/Covid trend data.csv"))
 covid_factor$week_commencing<-dmy(covid_factor$date)
 covid_factor$scale <- (100-covid_factor$x_gtrend_covid)/100
 
