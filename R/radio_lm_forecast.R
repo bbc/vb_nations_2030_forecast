@@ -145,7 +145,7 @@ new_year<- all_data %>% filter(quarter == 1) %>% select(year_quarter) %>% unique
 ###graph
 ggplot(data = all_data  %>% filter(grepl("bbc",source))
        , 
-       aes(x = year_quarter, y = reach000s, colour = source))+
+       aes(x = year_quarter, y = hours000s, colour = source))+
   geom_point()+
   scale_y_continuous(
     label = comma,
@@ -236,15 +236,24 @@ make_lm <- function(raw_data, forecast_measure, data_source_name, colour_scheme)
   
   
   ### get percentage change without the real post covid data only the forecast
+  ## average from last full year given
+  qrt_avg_2021<-actual_forecast %>%
+    filter(year == 2021) %>%
+    summarise(quarter_avg = mean(!!sym(forecast_measure))) %>% as.numeric()
+  
   perc_change <<-
     actual_forecast %>%
     group_by(year) %>%
     summarise({{forecast_measure}} := mean(!!sym(forecast_measure))) %>%
-    mutate(perc_change = round(100 * (!!sym(forecast_measure) / first(!!sym(forecast_measure)) - 1), 2)) %>% 
-    mutate(perc_change = formattable(perc_change, digits = 0, format = 'f')) %>% 
+    mutate(perc_change = round(100 * (!!sym(forecast_measure) / first(!!sym(forecast_measure)) - 1), 2),
+           perc_change_2021 = round(100 * (!!sym(forecast_measure) / qrt_avg_2021 - 1), 2)
+           ) %>% 
+    mutate(perc_change = formattable(perc_change, digits = 0, format = 'f'),
+           perc_change_2021 = formattable(perc_change_2021, digits = 0, format = 'f')
+           ) %>% 
     left_join(actual_forecast %>%  group_by(year) %>% summarise(year_quarter = min(year_quarter)), by = "year")
   
-  
+  print(perc_change)
 
   ## add in the post covid real data
   actual_forecast<<- 
@@ -302,17 +311,20 @@ make_lm <- function(raw_data, forecast_measure, data_source_name, colour_scheme)
     colour = "black"
   )
   
-
+ print("here")
+  ## average from first year
   qrt_avg_2015 <- actual_forecast %>%
     filter(year == 2015) %>%
     summarise(quarter_avg = mean(!!sym(forecast_measure))) %>% as.numeric()
   
+  
   #final_data
-  final_data<-
+  final_data<<-
     actual_forecast %>%
     select(year, quarter, nation, actual_pred,!!sym(forecast_measure)) %>%
-    mutate(perc_change = signif(
-      round(100 * ( (!!sym(forecast_measure) / qrt_avg_2015)-1 ), 0), 2)) %>% 
+    mutate(perc_change_2015 = signif(round(100 * ( (!!sym(forecast_measure) / qrt_avg_2015)-1 ), 0), 2),
+           perc_change_2021 = signif(round(100 * ( (!!sym(forecast_measure) / qrt_avg_2021)-1 ), 0), 2)
+           ) %>% 
     mutate({{forecast_measure}} := signif(!!sym(forecast_measure),2) )
   
   
@@ -324,10 +336,13 @@ make_lm <- function(raw_data, forecast_measure, data_source_name, colour_scheme)
                   ),
     row.names = FALSE
              )
-  
+  perc_change %>% select(-year_quarter) %>% 
+    mutate({{forecast_measure}} := signif(!!sym(forecast_measure),2) ) %>% 
+    rename(perc_change_2015 = perc_change) %>% print()
  
   write.csv(perc_change %>% select(-year_quarter) %>% 
-              mutate({{forecast_measure}} := signif(!!sym(forecast_measure),2) )
+              mutate({{forecast_measure}} := signif(!!sym(forecast_measure),2) ) %>% 
+              rename(perc_change_2015 = perc_change)
             ,
              file = paste0("./forecasts/radio/",
                            nation,'_annual_',
@@ -337,22 +352,32 @@ make_lm <- function(raw_data, forecast_measure, data_source_name, colour_scheme)
              row.names = FALSE
   )
   
-  final_data %>% 
-    filter(year > 2020 &year <= 2022) %>% 
-    select(-nation) %>% 
-    pivot_wider(names_from = actual_pred,
-                values_from = c({{forecast_measure}}, "perc_change"), names_sep="_"
-    ) %>% 
-    drop_na() %>% 
-    print()
+  # final_data %>% 
+  #   filter(year > 2020 &year <= 2022) %>% 
+  #   select(-nation) %>% 
+  #   pivot_wider(names_from = actual_pred,
+  #               values_from = c({{forecast_measure}}, "perc_change"), names_sep="_"
+  #   ) %>% 
+  #   drop_na() %>% 
+  #   print()
+  
+  
+  print(forecast_graph)
+  ## save plots
+  filename<-paste0("./forecasts/radio/graphs/",
+                   nation,'_annual_',
+                   sub('.*_', '' , raw_data$source %>% unique()),"_",
+                   forecast_measure,".jpg" )
+  print(filename)
+  dev.copy(jpeg,filename=filename);
+  dev.off ();
   
   print(forecast_graph)
 }
 
 
 
-
-
+############ reach 000s ##########
 ### England
 make_lm(
   raw_data = england_3mw_bbc,
@@ -415,6 +440,152 @@ make_lm(
   
 )
 
+############ hours 000s ##########
+### England
+make_lm(
+  raw_data = england_3mw_bbc,
+  forecast_measure = "hours000s",
+  data_source_name = "BBC Local Radio",
+  colour_scheme = nation_colours %>% filter(nation =='england')
+  
+)
+
+make_lm(
+  raw_data = england_3mw_commercial,
+  forecast_measure = "hours000s",
+  data_source_name = "Commercial Local Radio",
+  colour_scheme = nation_colours %>% filter(nation =='england')
+  
+)
+
+#### Scotland
+make_lm(
+  raw_data = scotland_6mw_bbc,
+  forecast_measure = "hours000s",
+  data_source_name = "BBC Local Radio",
+  colour_scheme = nation_colours %>% filter(nation =='scotland')
+)
+make_lm(
+  raw_data = scotland_6mw_commercial,
+  forecast_measure = "hours000s",
+  data_source_name = "Commercial Local Radio",
+  colour_scheme = nation_colours %>% filter(nation =='scotland')
+  
+)
+
+#### Wales
+make_lm(
+  raw_data = wales_6mw_bbc,
+  forecast_measure = "hours000s",
+  data_source_name = "BBC Local Radio",
+  colour_scheme = nation_colours %>% filter(nation =='wales')
+)
+make_lm(
+  raw_data = wales_6mw_commercial,
+  forecast_measure = "hours000s",
+  data_source_name = "Commercial Local Radio",
+  colour_scheme = nation_colours %>% filter(nation =='wales')
+  
+)
+
+#### Ulster
+make_lm(
+  raw_data = ulster_6mw_bbc,
+  forecast_measure = "hours000s",
+  data_source_name = "BBC Local Radio",
+  colour_scheme = nation_colours %>% filter(nation =='ulster')
+)
+make_lm(
+  raw_data = ulster_6mw_commercial,
+  forecast_measure = "hours000s",
+  data_source_name = "Commercial Local Radio",
+  colour_scheme = nation_colours %>% filter(nation =='ulster')
+  
+)
+
+############ write all forecasts into one document ############ 
+### clean evironement before this 
+getwd()
+forecast_list<-list.files(path = "./forecasts/radio/", pattern = ".csv")
+forecast_list
+
+
+## function to read in df and clean up names of columnes
+tidy_df <- function(data_list, item_num) {
+
+  df <- read.csv(file = paste0("./forecasts/radio/", data_list[item_num]))
+
+  measure = gsub("000s",'', names(df)[grepl('000s',names(df))]) 
+  print("measure")
+  print(measure)
+  names(df)[ncol(df)-1] <- paste0(measure, "_", colnames(df)[ncol(df)-1])
+  names(df)[ncol(df)] <- paste0(measure, "_", colnames(df)[ncol(df)])
+  
+  return(df)
+}
+tidy_df(data_list = forecast_list, item_num = 4) %>% head()
+
+### join reach and hours for each nation then bbc/commerical into dfs
+for(x in seq(1, length(forecast_list), by = 2)) {
+  
+  if(grepl("annual", forecast_list[x]) ){
+    forecast_name <-
+      paste0(gsub("_.*", "", forecast_list[x]),
+             ##nation name
+             "_",
+             gsub("_.*", '', gsub(".*annual_", "", forecast_list[x])),##bbc or commercial
+             '_annual')
+  }else{
+    forecast_name <-
+      paste0(gsub("_.*", "", forecast_list[x]),
+             ##nation name
+             "_",
+             gsub("_.*", '', gsub(".*quarter_", "", forecast_list[x])),##bbc or commercial
+             '_quarterly')
+  }
+
+  print(forecast_name)
+  
+  ## join together reach and hours in clean df
+  assign(
+    forecast_name,
+    tidy_df(data_list = forecast_list, item_num = x) %>%
+      cbind(
+        tidy_df(data_list = forecast_list, item_num = x + 1) %>% 
+          select(c(contains('000s'), contains("perc"), ) )
+      ),
+    envir = .GlobalEnv
+  )
+}
+
+## roll back version of R
+## do the write to excel#
+## send rebecca the powerpoint, data, graphs
+
+##### write into excel files
+### get list of dfs
+my_df_names <-ls()[sapply(ls(), function(x) class(get(x))) == 'data.frame']
+
+df_list <- list()
+for (i in 1:length(my_df_names)) {
+  df_list[[i]] <- get(my_df_names[i])
+}
+names(df_list) <- my_df_names
+
+file_name<- paste0("./forecasts/radio/nations_regions_radio_forecasts.xlsx")
+print(paste0("file name is ", file_name))
+
+library(xlsx)
+for(name in 1:length(df_list)){
+  print(name)
+  print(my_df_names[[name]])
+  write.xlsx(x = as.data.frame(df_list[[name]]),
+             file = file_name,
+             sheetName = my_df_names[[name]],
+             row.names = FALSE,
+             col.name = TRUE,
+             append = TRUE)
+}
 
 
 ############ comparison to ARIMA ############
