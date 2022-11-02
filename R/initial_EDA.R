@@ -10,10 +10,12 @@ library(lubridate)
 library(scales)
 library(ggrepel)
 theme_set(theme_classic())
+options(scipen = 999)
 ###### functions ######
 ### round up/down to nearest value for the axes limits
 round_any <- function(x, accuracy, func){func(x/ accuracy) * accuracy}
 
+#download.file('http://s3.amazonaws.com/redshift-downloads/drivers/RedshiftJDBC41-1.1.9.1009.jar','~/.redshiftTools/redshift-driver.jar')
 
 ### locally
 driver <-JDBC("com.amazon.redshift.jdbc41.Driver","~/.redshiftTools/redshift-driver.jar",identifier.quote = "`")
@@ -35,11 +37,13 @@ conn <- dbConnect(driver, url)
 dbGetQuery(conn,"select distinct brand_title, series_title from prez.scv_vmb ORDER BY RANDOM() limit 10;")
 
 ## get news regions data
-sql<- "SELECT * FROM central_insights_sandbox.vb_news_regions_historic_users;"
+sql<- "SELECT * FROM central_insights_sandbox.je_news_regions_historic_users_v2;"
+#sql<-"SELECT * FROM central_insights_sandbox.vb_news_regions_historic_users"
 nations_traffic<-dbGetQuery(conn, sql)
 nations_traffic$week_commencing<- ymd(nations_traffic$week_commencing)
 nations_traffic[,3:7] <- sapply(nations_traffic[,3:7],as.numeric)
-
+nations_traffic<- nations_traffic %>% rename("page_producer"= page_name )
+nations_traffic %>% head()
 
 ## get an extra column where each date is just first of the month to label axis
 library(zoo)
@@ -118,9 +122,10 @@ new_year<-ymd(c("2020-01-01","2021-01-01","2022-01-01"))
 ############## function so as to not repeat code for similar graphs ##########
 make_graph <- function(data, y_value, labels, v_line, title, y_lab, split, avg_label) {
 data$year<-year(data$week_commencing)
+
 avg_traffic<-
   data %>% #head() %>%
-    group_by(page_producer, year) %>%
+    group_by(page_producer, year,quarter) %>%
     mutate(
       median_visitors = median(!!sym(y_value)),
       mean_visitors = mean(!!sym(y_value))
@@ -132,6 +137,15 @@ avg_traffic<-
 
   print(avg_traffic)
   
+  label_data <- avg_traffic %>%
+    filter(
+      week_commencing == min(avg_traffic$week_commencing) |
+        week_commencing == max(avg_traffic$week_commencing)
+    ) %>%
+    mutate(median_var = signif(median_visitors, 2))
+  
+  print(label_data)
+  
 ggplot(data = data, aes(x = week_commencing, colour = page_producer)) +
     geom_point(aes(y = !!sym(y_value))) +
     {if(is.data.frame(labels))geom_point(data = labels,
@@ -140,10 +154,12 @@ ggplot(data = data, aes(x = week_commencing, colour = page_producer)) +
     xlab("Date") +
     labs(title = title) +
     {if(split == TRUE) 
-    scale_y_continuous(label = comma,
+      #scale_y_continuous(label = comma,
+    scale_y_continuous(label = scales::number_format(accuracy = 1),
                        limits = ~ c(min(.x), max(.x)*1.2),
                        n.breaks = 10)
-      else scale_y_continuous(label = comma,
+      #else scale_y_continuous(label = comma,
+      else scale_y_continuous(label = scales::number_format(accuracy = 1),
                               limits = ~ c(min(.x), max(.x)*1.1),
                               n.breaks = 20)} +
     geom_vline(xintercept = v_line,
@@ -181,16 +197,13 @@ ggplot(data = data, aes(x = week_commencing, colour = page_producer)) +
           )+
   ### add averages line and text
   {if(avg_label ==TRUE)geom_text(
-    data = avg_traffic %>% filter(
-      week_commencing == min(avg_traffic$week_commencing) |
-        week_commencing == max(avg_traffic$week_commencing)
-    ) %>%
-      mutate(median = signif(median_visitors,2)),
+    data = label_data, 
     mapping = aes(
       x = week_commencing,
-      y = median,
+      y = median_var,
       #Inf,
-      label = comma(median),
+      #label = comma(median_var),
+      label = comma(median_var) ,
       colour = page_producer
     ),
     nudge_y = 0.1,
@@ -198,9 +211,10 @@ ggplot(data = data, aes(x = week_commencing, colour = page_producer)) +
     vjust   = 1.5
   )}+
   geom_line(data = avg_traffic,
-            aes(x =week_commencing, y = median_visitors, colour = page_producer ),
+            aes(x = week_commencing, y = median_visitors, colour = page_producer ),
             linetype = "dashed"
   )
+
 
 
 }
@@ -229,7 +243,7 @@ make_graph(
   labels = labels,
   v_line = new_year,
   y_lab = "Number of Visitors",
-  title = "Visitors to BBC News Nations pages (w/c 2019-03-04 to 2022-09-05)",
+  title = "Visitors to BBC News Nations pages (w/c 2019-03-04 to 2022-10-10)",
   split = FALSE,
   avg_label = TRUE
 )
