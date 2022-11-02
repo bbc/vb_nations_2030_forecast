@@ -23,7 +23,6 @@ my_aws_creds <-read.csv("~/Documents/Projects/DS/redshift_creds.csv",header = TR
 url <-paste0("jdbc:redshift://localhost:5439/redshiftdb?user=",my_aws_creds$user,"&password=",my_aws_creds$password)
 conn <- dbConnect(driver, url)
 
-
 ######### Get Redshift creds  MAP #########
 # get_redshift_connection <- function() {
 #   driver <-JDBC(driverClass = "com.amazon.redshift.jdbc.Driver",classPath = "/usr/lib/drivers/RedshiftJDBC42-no-awssdk-1.2.41.1065.jar",identifier.quote = "`")
