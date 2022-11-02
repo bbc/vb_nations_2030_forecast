@@ -132,7 +132,29 @@ make_plot(
   split = TRUE
 )
 
+### account for covid with scale factor ###
 
+covid_factor<- read.csv("Covid trend data.csv")
+covid_factor$week_commencing<-dmy(covid_factor$date)
+covid_factor$scale <- (100-covid_factor$x_gtrend_covid)/100
+
+ggplot(covid_factor, aes(x = week_commencing, y = x_gtrend_covid ))+
+  geom_point()
+
+england_scaled<-
+clean_data %>% filter(region =='England') %>% 
+  left_join(covid_factor %>% select(week_commencing, scale), 
+            by = "week_commencing") %>% 
+  replace(is.na(.), 1) %>% 
+  mutate(viewers = viewers * scale)
+england_scaled %>% head()
+### Basic plot
+make_plot(
+  data = england_scaled,
+  y_lab = paste0("Covid scaled - viewers to BBC News ",clean_data$region," Bulletin (w/c ",clean_data$week_commencing %>% min()," to ",clean_data$week_commencing %>% max(),")"),
+  y_value = 'viewers',
+  split = TRUE
+)
 
 ############# Time Series ##################
 library(tseries)
@@ -142,6 +164,7 @@ england <- clean_data %>% filter(region =='England') %>%
 ### remove covid ###
 england<-england %>% filter(week_commencing<= '2020-03-02' | week_commencing>= '2021-03-01' ) %>% 
   filter(paste0(year,quarter)!='20223') ##remove the half quarter
+
 # write.csv(england, file = 'england_no_covid.csv', row.names = FALSE)
 # england<- read.csv("england_no_covid.csv") %>% 
 #   mutate(week_commencing = ymd(strptime(paste0(year, "Monday", week), "%Y%A%U")))
@@ -591,5 +614,23 @@ make_forecast_plot(
   split = TRUE,
   colour_scheme = nation_colours %>% filter(nation =='England')
 )
+
+
+######### try using a linear model #########
+england<-clean_data %>% filter(region == 'England')
+england$week_commencing
+england$month_num <- england$week_commencing %>% month()
+england$week_commencing %>% cbind(covid_factor$date)
+
+model = lm(data = england, 
+           formula = viewers ~ month_num + poly(month_num,3) + covid_factor$x_gtrend_covid)#239
+
+england %>%  select(year, month_num) %>% unique() %>% nrow()
+
+
+
+
+
+
 
 
