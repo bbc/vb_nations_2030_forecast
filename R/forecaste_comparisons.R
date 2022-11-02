@@ -13,9 +13,14 @@ library(forecast)
 library(zoo)
 theme_set(theme_classic())
 
-forecasts_files<-list.files(path = "forecasts")
+forecasts_files<-grep(pattern = "(?=.*csv)(?=.*reach)(?=.*annual)", x = list.files(path = "forecasts/radio"), value = TRUE, perl = TRUE)
+forecasts_files
+gsub("_.*","", forecasts_files) #nation
+gsub("_.*",'',  gsub(".*annual_","", forecasts_files))
 
-nations_forecasts<- do.call(rbind, lapply(forecasts_files, function(x) read.csv(file= paste0("forecasts/",x))))
+nations_forecasts<- do.call(rbind, lapply(forecasts_files, 
+                                          function(x) read.csv(file= paste0("forecasts/radio/",x))
+                                          ))
 nations_forecasts<-
 nations_forecasts %>% 
   mutate(actual_pred = gsub('icted','',actual_pred)) %>% 
@@ -150,6 +155,98 @@ avg_traffic %>%
                  paste0(round(100*(median_viewers/median_2017 -1),0),"%" ) ) %>% 
   select(-median_2017)
   
+
+
+############## Plot normalised data to compare ##############
+
+nations_forecasts_scaled<-
+nations_forecasts %>% #head() %>%
+  group_by(region) %>%
+  mutate(scaled_viewers_mil = scale(viewers_milions))
+
+#### average traffic
+avg_traffic_scaled <-
+  nations_forecasts_scaled%>% #head() %>%
+  mutate(scaled_viewers_mil = scale(viewers_milions)) %>% 
+  group_by(year, region) %>%
+  mutate(median_viewers = median(scaled_viewers_mil)) %>%
+  select(year,
+         week_commencing,
+         region,
+         median_viewers)
+### % decline
+perc_change<-
+  avg_traffic_scaled %>% 
+  filter(year == 2017 | year == 2030 | year == 2022) %>%
+  select(year, region, median_viewers) %>%
+  unique() %>% 
+  mutate(year = paste0("y_",year)) %>% 
+  spread(key = year, value = median_viewers) %>% 
+  mutate(perc = paste0(round(100*(y_2030/y_2017 -1),0),"%" ),
+         perc_2022 = paste0(round(100*(y_2022/y_2017 -1),0),"%" ),
+  ) %>% 
+  cbind(avg_traffic_scaled %>% 
+          ungroup() %>%  
+          filter(week_commencing == max(week_commencing)) %>% 
+          select(week_commencing,median_viewers)
+  ) %>% 
+  mutate(nation_measure = paste0(region, "_pred"))
+perc_change
+
+######### graph #########
+
+ggplot(data = nations_forecasts_scaled
+       , aes(x = week_commencing,  colour = nation_measure)) +
+  geom_point(aes(y = scaled_viewers_mil)) +
+  ylab("Average Weekly Viewers (million)") +
+  xlab("Date") +
+  labs(title = "Predicted Viewers to BBC Local News") +
+  scale_y_continuous(
+    label = comma,
+    limits = ~ c(min(.x), max(.x) * 1.1),
+    n.breaks = 10
+  ) +
+  scale_colour_manual(breaks = nation_colours$nation_measure,
+                      values= nation_colours$colour)+
+  geom_vline(
+    xintercept = new_year$week_commencing,
+    linetype = "dashed",
+    color = "grey"
+  ) +
+  scale_x_date(
+    labels = date_format("%Y-%m-%d"),
+    breaks = x_axis_dates$week_commencing,
+    sec.axis = sec_axis(
+      name = NULL,
+      breaks = x_axis_dates$week_commencing ,
+      trans = ~ .,
+      labels = date_format("%Y")
+    )
+  ) +
+  #facet_wrap( ~ region, nrow = 4, scales = "free_y") +
+  theme(
+    axis.text.x = element_text(angle = 90),
+    panel.grid.major.y = element_line(size = .1, color = "grey") ,
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    legend.title=element_blank(),
+    legend.position="none"
+  ) +
+  geom_line(
+    data = avg_traffic_scaled,
+    aes(x = week_commencing, y = median_viewers),
+    linetype = "dashed",
+    colour = "black"
+  )+
+  geom_label(data = perc_change, 
+             aes(x = week_commencing, y = median_viewers,label = perc)
+             ,colour = "black")
+
+
+
+
+
 
 
 
