@@ -19,7 +19,21 @@ round_any <- function(x, accuracy, func){func(x/ accuracy) * accuracy}
 
 #download.file('http://s3.amazonaws.com/redshift-downloads/drivers/RedshiftJDBC41-1.1.9.1009.jar','~/.redshiftTools/redshift-driver.jar')
 
-## get news regions data historic from excel sheet
+### get the covid scale factor
+covid_factor<- read.csv("~/Documents/Projects/DS/vb_nations_2030_forecast/data/Covid trend data.csv")
+covid_factor$week_commencing<-dmy(covid_factor$date)
+
+covid_factor<-
+  covid_factor %>% select(week_commencing, x_google_mob_retail) %>% 
+  mutate(quarter = quarter(week_commencing),
+         year = year(week_commencing)) %>% 
+  rename(covid = x_google_mob_retail)
+
+
+covid_factor %>% head()
+
+################### data set one ####################
+## get news regions data historic from excel sheet that came from Lucy Handscome in the News team
 historic_web_usage <- read_excel("~/Documents/Projects/DS/vb_nations_2030_forecast/data/historic_web_usage.xlsx")
 historic_web_usage$week_commencing<- ymd(historic_web_usage$week_commencing)
 historic_web_usage %>% head() ## lots of the first rows are NA
@@ -45,20 +59,7 @@ historic_web_usage  %>% head()
 
 historic_web_usage$nation %>% unique()
 
-### get the covid scale factor
-covid_factor<- read.csv("~/Documents/Projects/DS/vb_nations_2030_forecast/data/Covid trend data.csv")
-covid_factor$week_commencing<-dmy(covid_factor$date)
-
-covid_factor<-
-  covid_factor %>% select(week_commencing, x_google_mob_retail) %>% 
-  mutate(quarter = quarter(week_commencing),
-         year = year(week_commencing)) %>% 
-  rename(covid = x_google_mob_retail)
-
-
-covid_factor %>% head()
-
-
+### join the visitor data to the covid factor
 forecast_data <-
   historic_web_usage  %>%
   left_join(covid_factor, by = c("week_commencing", "quarter", "year")) %>%
@@ -67,12 +68,40 @@ forecast_data <-
 
 forecast_data %>% head()
 
+###################### data set from Rebecca ##########################
+
+old_methodology <- read_excel("~/Documents/Projects/DS/vb_nations_2030_forecast/data/Nations News Online.xlsx",
+                                 sheet = '(Old methodology)(clean)')
+old_methodology$week_commencing<-ymd(old_methodology$week_commencing)
+old_methodology<-old_methodology %>% gather(key = 'nation', value = 'visitors', 3:6)%>% mutate(method = "old") %>% select(-week)
+old_methodology
+
+new_methodology<-read_excel("~/Documents/Projects/DS/vb_nations_2030_forecast/data/Nations News Online.xlsx",
+           sheet = '1. Nations News Online(clean)')
+new_methodology$nation<-tolower(gsub("NATIONS_",'',new_methodology$site))
+new_methodology$week_commencing<- as.Date(paste(new_methodology$year, new_methodology$week, 1, sep="-"), "%Y-%U-%u")
+
+new_methodology<- new_methodology %>% select(week_commencing,nation, visitors) %>%  mutate(method = "new")
+new_methodology
+
+forecast_data <-
+  old_methodology  %>%
+  rbind(new_methodology) %>% 
+  mutate(year = year(week_commencing), quarter = quarter(week_commencing)) %>% 
+  left_join(covid_factor, by = c("week_commencing", "quarter", "year")) %>%
+  replace(is.na(.), 0) %>%
+  arrange(week_commencing)
+forecast_data %>% head()
+
+
+################################################
+
 #### get some set colours to use ###
 ### get colours 
 # #get default colour codes already used and find a lightened version for the predicted value
 colours <- hue_pal()(4)
 
-forecast_data$nation %>% unique()
+
 nation_colours <-
   sapply(colours, function(x) {
     colorRampPalette(c(x, "#FFFFFF"))(10)
@@ -80,7 +109,7 @@ nation_colours <-
   as.data.frame() %>%
   filter(row_number() == 5) %>%
   gather(key = actual.color, value = pred.color) %>%
-  cbind(data.frame(nation = historic_web_usage$nation %>% unique()))
+  cbind(data.frame(nation = c('england','northern_ireland','scotland','wales'  )))
 
 ############### have a look at the data there is ##############
 
@@ -89,24 +118,24 @@ new_year<- forecast_data%>% group_by(year) %>% summarise(new_year = min(week_com
 x_axis_dates<-forecast_data%>% group_by(year,quarter) %>% summarise(year_quarter = min(week_commencing))
 x_axis_dates 
 
-# new_year<-
-# new_year %>% rbind(
-#   data.frame(year_quarter = seq(
-#     as.Date(forecast_data$week_commencing %>% max() %>% ymd() + 7),
-#     by = "week",
-#     length.out = 52 * 9
-#   )) %>%
-#     mutate(year = year(year_quarter)) %>%
-#     filter(year < 2031 & year >2022) %>% 
-#     group_by(year) %>% 
-#     summarise(new_year = min(year_quarter)) %>% 
-#     select(year, new_year)
-# )
+new_year<-
+new_year %>% rbind(
+  data.frame(year_quarter = seq(
+    as.Date(forecast_data$week_commencing %>% max() %>% ymd() + 7),
+    by = "week",
+    length.out = 52 * 9
+  )) %>%
+    mutate(year = year(year_quarter)) %>%
+    filter(year < 2031 & year >2022) %>%
+    group_by(year) %>%
+    summarise(new_year = min(year_quarter)) %>%
+    select(year, new_year)
+)
 
 x_axis_dates 
 
 forecast_data %>% head()
-nation_x<-"Scotland"
+
 ###graph
 ggplot(data = forecast_data %>% 
          filter(nation %in% c('england', 'scotland', 'wales', 'northern_ireland')) %>% 
@@ -148,6 +177,9 @@ ggplot(data = forecast_data %>%
   ) + facet_wrap( ~ nation, scales = "free_y")
 
 
+
+
+
 ######## compare values since ati march 2019 for all platforms to that of just desktop devices
 
 
@@ -185,6 +217,9 @@ historic_desktop_usage %>% rename(desktop_visitors = visitors) %>%
 ) 
 historic_desktop_usage$nation %>% unique()
 new_year<- historic_desktop_usage%>% group_by(year) %>% summarise(new_year = min(week_commencing))
+
+
+
 ###### graph for new ATI data 
 ggplot(data = historic_desktop_usage %>% 
          filter(nation %in% c('england', 'scotland', 'wales', 'northern ireland')) %>% 
@@ -231,7 +266,7 @@ ggplot(data = historic_desktop_usage %>%
 
 
 #############  make a linear model ########
-historic_web_usage  %>% head()
+
 forecast_data %>% mutate(week = week(week_commencing)) %>% head()
 
 make_lm <- function(raw_data, forecast_measure, data_source_name, colour_scheme) {
@@ -278,13 +313,19 @@ actual_forecast <<-
     mutate(nation = raw_data$nation %>% unique())
 
 
-  ## the data starts at different times so get first full year
-  first_full_year<- actual_forecast %>% group_by(year) %>% count() %>% filter(n>=52) %>% head(n=1) %>% select(year) %>% as.numeric()
-  
-  print(first_full_year)
+  # ## the data starts at different times so get first full year
+  # first_full_year<- actual_forecast %>% group_by(year) %>% count() %>% filter(n>=52) %>% head(n=1) %>% select(year) %>% as.numeric()
+  # 
+  # print(first_full_year)
+  # qrt_avg <<- actual_forecast %>%
+  #   filter(year == first_full_year) %>%
+  #   summarise(quarter_avg = mean(!!sym(forecast_measure))) %>% as.numeric()
+  # 
+  ## for the new Rebecca data use 2019 although it's not a full year
   qrt_avg <<- actual_forecast %>%
-    filter(year == first_full_year) %>%
+    filter(year == 2019) %>%
     summarise(quarter_avg = mean(!!sym(forecast_measure))) %>% as.numeric()
+  
   qrt_avg_2021<-actual_forecast %>%
     filter(year == 2021) %>%
     summarise(quarter_avg = mean(!!sym(forecast_measure))) %>% as.numeric()
@@ -381,7 +422,7 @@ final_data<<-
   mutate({{forecast_measure}} := signif(!!sym(forecast_measure),3) )
 
 write.csv( final_data ,
-           file = paste0("./forecasts/web/",
+           file = paste0("./forecasts/web/rebecca_data/",
                          nation,'_quarter_desktop_',
                          sub('.*_', '' , raw_data$nation %>% unique()),"_",
                          forecast_measure,".csv" 
@@ -393,7 +434,7 @@ write.csv(perc_change %>%
             mutate({{forecast_measure}} := signif(!!sym(forecast_measure),3) ) %>% 
             select(-week_commencing)
           ,
-          file = paste0("./forecasts/web/",
+          file = paste0("./forecasts/web/rebecca_data/",
                         nation,'_annual_desktop_',
                         sub('.*_', '' , raw_data$nation %>% unique()),"_",
                         forecast_measure,".csv" 
@@ -403,7 +444,7 @@ write.csv(perc_change %>%
 
 
 ## save plots
-filename<-paste0("./forecasts/web/graphs/",
+filename<-paste0("./forecasts/web/graphs/rebecca_data/",
                  nation,'_annual_desktop_',
                  sub('.*_', '' , raw_data$nation %>% unique()),"_",
                  forecast_measure,".jpg" )
@@ -419,9 +460,9 @@ print(forecast_graph)
 ### England -- desktop only data
 nation_x<- 'Northern Ireland'
 make_lm(
-  raw_data = historic_desktop_usage %>% filter(nation == tolower(nation_x)) %>% filter(visitors >0),
+  raw_data = forecast_data %>% filter(nation == tolower(gsub(' ','_', nation_x))) %>% filter(visitors >0),
   forecast_measure = "visitors",
-  data_source_name = paste0("BBC News ",nation_x, " - desktop since 2019"),
+  data_source_name = paste0("BBC News ",nation_x),
   colour_scheme = nation_colours %>% filter(nation == gsub(' ','_', tolower(nation_x) ))
 )
 
