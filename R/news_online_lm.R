@@ -9,6 +9,7 @@ library(formattable)
 library(lubridate)
 library(scales)
 library(ggrepel)
+library(zoo)
 
 
 theme_set(theme_classic())
@@ -50,7 +51,7 @@ historic_web_usage$quarter<-quarter(historic_web_usage $week_commencing)
 historic_web_usage$year<-year(historic_web_usage $week_commencing)
 historic_web_usage<- historic_web_usage %>% filter(!nation %in% c('combined','bbc_news_overall')  ) 
 
-
+historic_web_usage<- historic_web_usage %>% filter(year >=2019)
 historic_web_usage  %>%  
   group_by(year, quarter) %>% 
   summarise(quarter_min = min(year_month))
@@ -68,7 +69,7 @@ forecast_data <-
 
 forecast_data %>% head()
 
-###################### data set from Rebecca ##########################
+###################### data set from Rebecca - this is the data that was ACTUALY USED ##########################
 
 old_methodology <- read_excel("~/Documents/Projects/DS/vb_nations_2030_forecast/data/Nations News Online.xlsx",
                                  sheet = '(Old methodology)(clean)')
@@ -78,9 +79,10 @@ old_methodology
 
 new_methodology<-read_excel("~/Documents/Projects/DS/vb_nations_2030_forecast/data/Nations News Online.xlsx",
            sheet = '1. Nations News Online(clean)')
+
 new_methodology$nation<-tolower(gsub("NATIONS_",'',new_methodology$site))
 new_methodology$week_commencing<- as.Date(paste(new_methodology$year, new_methodology$week, 1, sep="-"), "%Y-%U-%u")
-
+new_methodology$week_commencing<-ymd(new_methodology$week_commencing)
 new_methodology<- new_methodology %>% select(week_commencing,nation, visitors) %>%  mutate(method = "new")
 new_methodology
 
@@ -126,7 +128,7 @@ new_year %>% rbind(
     length.out = 52 * 9
   )) %>%
     mutate(year = year(year_quarter)) %>%
-    filter(year < 2031 & year >2022) %>%
+    filter(year <= 2031 & year >2022) %>%
     group_by(year) %>%
     summarise(new_year = min(year_quarter)) %>%
     select(year, new_year)
@@ -163,22 +165,23 @@ ggplot(data = forecast_data %>%
     xintercept = new_year$new_year,
     linetype = "dashed",
     color = "grey"
-  ) +
+  ) + facet_wrap( ~ nation, scales = "free_y")+
   scale_x_date(
+    #limits = c(x_axis_dates$year_quarter %>% min(), x_axis_dates$year_quarter %>% max() ),
     limits = c(new_year$new_year %>% min(), new_year$new_year %>% max() ),
     labels = date_format("%Y-%m-%d"),
     breaks = new_year$new_year,
     sec.axis = sec_axis(
       name = NULL,
       trans = ~ .,
-      labels = function(x)
-        format(as.yearqtr(x), "%Y")
+      labels = function(x) format(as.yearqtr(x), "%Y")
     )
-  ) + facet_wrap( ~ nation, scales = "free_y")
+  )
 
 
 
-
+## compare to Rioch's path to target from last year. 
+## find the paths to target thing - check it's not vastly different
 
 ######## compare values since ati march 2019 for all platforms to that of just desktop devices
 
@@ -423,7 +426,7 @@ final_data<<-
 
 write.csv( final_data ,
            file = paste0("./forecasts/web/rebecca_data/",
-                         nation,'_quarter_desktop_',
+                         nation,'_quarter_',
                          sub('.*_', '' , raw_data$nation %>% unique()),"_",
                          forecast_measure,".csv" 
            ),
@@ -435,7 +438,7 @@ write.csv(perc_change %>%
             select(-week_commencing)
           ,
           file = paste0("./forecasts/web/rebecca_data/",
-                        nation,'_annual_desktop_',
+                        nation,'_annual_',
                         sub('.*_', '' , raw_data$nation %>% unique()),"_",
                         forecast_measure,".csv" 
           ),
@@ -445,7 +448,7 @@ write.csv(perc_change %>%
 
 ## save plots
 filename<-paste0("./forecasts/web/graphs/rebecca_data/",
-                 nation,'_annual_desktop_',
+                 nation,'_annual_',
                  sub('.*_', '' , raw_data$nation %>% unique()),"_",
                  forecast_measure,".jpg" )
 dev.copy(jpeg,filename=filename);
@@ -457,8 +460,8 @@ print(forecast_graph)
 }
 
 
-### England -- desktop only data
-nation_x<- 'Northern Ireland'
+### England
+nation_x<- 'Scotland'
 make_lm(
   raw_data = forecast_data %>% filter(nation == tolower(gsub(' ','_', nation_x))) %>% filter(visitors >0),
   forecast_measure = "visitors",
@@ -501,4 +504,89 @@ make_lm(
   data_source_name = "BBC News Northern Ireland",
   colour_scheme = nation_colours %>% filter(nation =='northern_ireland')
 )
+
+
+
+
+### comparison to paths to targets
+
+forecast_data %>% #head() %>% 
+  filter(nation == 'england') %>% 
+  mutate(month = month(week_commencing)) %>% 
+  group_by(year, month) %>% 
+  summarise(median_visitors = median(visitors),
+            mean_visitors= mean(visitors)
+            )
+
+
+
+paths_england<-read_excel("~/Documents/Projects/DS/vb_nations_2030_forecast/data/Nations Paths to Targets 2223 20221102.xlsx",
+           sheet = 'News 2')[,1:4]
+colnames(paths_england)<-gsub(' ','_', tolower(paths_england[1,]))
+paths_england<-paths_england %>% rename(month = quarter)  %>% mutate_if(is.character,as.numeric)
+
+paths_england = paths_england[-1,]
+paths_england<- paths_england %>% filter(!is.na(actual) | !is.na(path_to_target) )
+
+paths_england %>% head()
+
+
+
+comparison = forecast_data %>% #head() %>%
+  filter(nation == 'england') %>%
+  mutate(month = month(week_commencing)) %>%
+  group_by(year, month) %>%
+  summarise(median_visitors = median(visitors),
+            mean_visitors = mean(visitors)) %>%
+  left_join(paths_england,  by = c('year', 'month')) %>% 
+  group_by(year, month) %>% 
+  mutate(month = sprintf("%02d", month)) %>% 
+  gather(key = measure, value = visitors, 3:6 ) %>% 
+  mutate(dt = ymd(paste0(year,month, '01')),
+         quarter = quarter(dt)
+         )
+
+comparison <- comparison %>%
+  left_join(
+    comparison %>% group_by(year, quarter) %>% summarise(qtr_start = min(dt)),
+    by = c('year', 'quarter')
+  ) %>% 
+  left_join(comparison %>% group_by(year) %>% mutate(year_min = min(dt)) %>% select(year, year_min) %>% unique(),
+            by ='year' )
+
+comparison %>% head()
+
+ggplot(data = comparison, aes(x = dt, y = visitors, colour = measure))+
+  geom_point()+
+  scale_y_continuous(
+    label = comma,
+    limits = ~ c(0, max(.x) * 1.1),
+    n.breaks = 10
+  ) +
+  scale_x_date(
+    limits = c(comparison$dt %>% min(), comparison$dt  %>% max() ),
+    labels = date_format("%Y-%m-%d"),
+    breaks = comparison$qtr_start,
+    sec.axis = sec_axis(
+      name = NULL,
+      trans = ~ .,
+      labels = year)
+    )+
+  theme(
+    axis.text.x = element_text(angle = 90),
+    panel.grid.major.y = element_line(size = .1, color = "grey") ,
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank()
+   # legend.title = element_blank(),
+    #legend.position = "none"
+  ) +
+  geom_vline(
+    xintercept = comparison$year_min %>% unique(),
+    linetype = "dashed",
+    color = "grey"
+  ) +
+  ggtitle("Measure comparison with target set for 2023 (from paths to target) \nEngland")
+
+
 
