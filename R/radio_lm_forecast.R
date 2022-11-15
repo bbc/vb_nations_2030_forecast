@@ -10,7 +10,8 @@ theme_set(theme_classic())
 
 ################ read in covid data set ##############
 
-covid_factor<- read.csv("Covid trend data.csv")
+covid_factor<- read.csv("~/Documents/Projects/DS/vb_nations_2030_forecast/data/Covid trend data.csv")
+
 covid_factor$week_commencing<-dmy(covid_factor$date)
 
 covid_factor<-
@@ -29,7 +30,7 @@ covid_factor$year_quarter %>% unique()
 
 
 ############ read in all sheets of the RAJAR data into a list of DF ########
-path <- "../nations_radio_trends.xlsx"
+path <- "~/Documents/Projects/DS/vb_nations_2030_forecast/data/nations_radio_trends.xlsx"
 radio_data <-
   path %>%
   excel_sheets() %>%
@@ -102,7 +103,6 @@ clean_data <- function(df, df_name) {
 
   return(get({{clean_df_name}}))
 }
-
 
 ### clean the dfs that are needed
 for(x in 1:length(radio_data)){
