@@ -445,11 +445,11 @@ write.csv(perc_change %>%
           row.names = FALSE
 )
 
-
+print(forecast_graph)
 ## save plots
 filename<-paste0("./forecasts/web/graphs/rebecca_data/",
                  nation,'_annual_',
-                 sub('.*_', '' , raw_data$nation %>% unique()),"_",
+                 #sub('.*_', '' , raw_data$nation %>% unique()),"_",
                  forecast_measure,".jpg" )
 dev.copy(jpeg,filename=filename);
 dev.off ();
@@ -461,7 +461,7 @@ print(forecast_graph)
 
 
 ### England
-nation_x<- 'Scotland'
+nation_x<- 'Wales'
 make_lm(
   raw_data = forecast_data %>% filter(nation == tolower(gsub(' ','_', nation_x))) %>% filter(visitors >0),
   forecast_measure = "visitors",
