@@ -54,7 +54,6 @@ clean_data <- data %>% mutate(
   mutate(quarter = quarter(week_commencing))
 
 
-
 #######  EDA #########
 
 ###### function to make graph
