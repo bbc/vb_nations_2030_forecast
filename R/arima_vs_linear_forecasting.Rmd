@@ -8,6 +8,14 @@ toc_float: true
 ceruleancss: picture.css
 ---
 # {.tabset .tabset-fade}
+<style>
+.main-container {
+    max-width: 940px;
+    margin-left: auto;
+    margin-right: auto;
+}
+</style>
+
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
@@ -50,12 +58,13 @@ dates <- data.frame(week_commencing = seq(
   length.out = 52 * 8
 )) %>%
   mutate(year = year(week_commencing),
-         quarter = quarter(week_commencing)) %>%
+         quarter = quarter(week_commencing),
+         week = week(week_commencing)
+         ) %>%
   filter(paste0(year,quarter) < '20203')
 
 new_year <-
   dates %>%
-  mutate(week = week(week_commencing)) %>%
   filter(week == 1) %>%
   select(week_commencing, year,quarter) %>%
   mutate(year_quarter = paste0(year,'-q',quarter))
@@ -64,8 +73,11 @@ new_year <-
 
 ## read in tv and radio data
 radio<-read.csv('~/Documents/Projects/DS/vb_nations_2030_forecast/data/england_rajar_bbc.csv')
-tv<-read.csv('~/Documents/Projects/DS/vb_nations_2030_forecast/data/england_tv.csv') %>% mutate(year_quarter = paste0(year,'_q',quarter))
+tv <-
+  read.csv('~/Documents/Projects/DS/vb_nations_2030_forecast/data/england_tv.csv') %>% mutate(year_quarter = paste0(year, '_q', quarter))
+
 tv$week_commencing<- ymd(tv$week_commencing)
+tv$week = week(tv$week_commencing)
 
 ##clean
 radio <- radio %>% mutate(region = 'England') %>%
@@ -78,10 +90,9 @@ radio <- radio %>% mutate(region = 'England') %>%
 
 ##clean
 tv <-
-  tv %>% select(region, year, quarter, year_quarter, week_commencing, viewers) %>%
+  tv %>% select(region, year, quarter, year_quarter, week, week_commencing, viewers) %>%
   left_join(covid_factor, by = 'week_commencing') %>%
-  replace(is.na(.), 0) %>%
-  mutate(covid_exp = exp(covid))
+  replace(is.na(.), 0) 
 
 #tv %>% head()
 
@@ -89,10 +100,10 @@ tv <-
 
 ## Local BBC Radio England
 
-
 The quarterly listening hours to BBC local radio stations in England from 2015 until Q1 2020, before recording data stopped because of Covid.
 
 Visually the radio data suggest some cyclical behaviour with a higher number of hours in the winter quarters. 
+
 
 ```{r radio, echo=FALSE}
 x_dates <-
@@ -276,7 +287,7 @@ From the graph showing TV viewing, a few trends can be observed.
 ```{r tv_graph, echo=FALSE}
 
 x_dates <-
-tv %>% select(year, quarter, year_quarter, week_commencing) %>%
+tv %>% select(year, quarter, year_quarter, week_commencing, week) %>%
   rbind(
     data.frame(week_commencing = seq(
       as.Date(tv$week_commencing %>% max() %>% ymd() + 7),
@@ -286,11 +297,14 @@ tv %>% select(year, quarter, year_quarter, week_commencing) %>%
       mutate(
         year = year(week_commencing),
         quarter = quarter(week_commencing),
-        year_quarter = paste0(year, "_q", quarter)
+        year_quarter = paste0(year, "_q", quarter),
+        week = week(week_commencing)
       ) %>%
       filter(year < 2031) %>%
-      select(year, quarter, year_quarter, week_commencing)
-  ) %>% unique() %>%
+      select(year, quarter, year_quarter, week_commencing, week)
+  ) %>% unique()
+
+x_axis_qtr_dates<- x_dates %>%
   group_by(year, quarter, year_quarter) %>% summarise(week_commencing = min(week_commencing))
 
 new_year <-
@@ -329,14 +343,14 @@ tv_graph<-
   scale_x_date(
     limits = as.Date(
       c(
-        x_dates$week_commencing[x_dates$week_commencing <= max(tv$week_commencing)] %>% min(),
-        x_dates$week_commencing[x_dates$week_commencing <= max(tv$week_commencing)] %>% max()
+        x_axis_qtr_dates$week_commencing[x_axis_qtr_dates$week_commencing <= max(tv$week_commencing)] %>% min(),
+        x_axis_qtr_dates$week_commencing[x_axis_qtr_dates$week_commencing <= max(tv$week_commencing)] %>% max()
       )
     ),
     labels =  function(x)
       format(as.yearqtr(x), "%Y Q%q'"),
-    breaks = x_dates$week_commencing[x_dates$quarter == 1 &
-                                       x_dates$week_commencing <= max(tv$week_commencing)] ,
+    breaks = x_axis_qtr_dates$week_commencing[x_axis_qtr_dates$quarter == 1 & 
+                                       x_axis_qtr_dates$week_commencing <= max(tv$week_commencing)] ,
 sec.axis = sec_axis(
   name = NULL,
   trans = ~ .,
@@ -350,8 +364,11 @@ tv_graph
 <br>
 <br>
 <br>
-Adding a simple linear trend to the graph produces the forecast shown below in black: a downwards trend is given but there is no seasonality. The blue trend line uses historic data only from pre-Covid and shows a much steeper downwards trend. This linear model cannot account for that uptick in viewing during the Covid period. Therefore, of the three factors easily identifiable in the data the simple linear model only accounts for one.
+### Simple trend 
+<br>
+Adding a simple linear trend to the graph produces the forecast shown below in black where a downwards trend is given. This trend has no seasonality and looks to be inflated by the higher than typical viewing during Covid. A blue trend line was also added which uses historic data from pre-Covid and shows a much steeper downwards trend. Therefore, of the three factors easily identifiable in the data, the simple linear model only accounts for one.
 
+<br>
 
 
 ```{r tv_simple_forecast, echo=FALSE}
@@ -385,13 +402,13 @@ tv_basic_graph <-
   scale_x_date(
     limits = as.Date(
       c(
-        x_dates$week_commencing%>% min(),
-        x_dates$week_commencing%>% max()
+        x_axis_qtr_dates$week_commencing%>% min(),
+        x_axis_qtr_dates$week_commencing%>% max()
       )
     ),
     labels =  function(x)
       format(as.yearqtr(x), "%Y Q%q'"),
-    breaks = x_dates$week_commencing[x_dates$quarter == 1 ] ,
+    breaks = x_axis_qtr_dates$week_commencing[x_axis_qtr_dates$quarter == 1 ] ,
 sec.axis = sec_axis(
   name = NULL,
   trans = ~ .,
@@ -405,32 +422,35 @@ tv_basic_graph +
     method = "lm",
     colour = "black",
     linetype = "dashed",
-    fullrange = TRUE
+    fullrange = TRUE,
+    se = FALSE
   ) +
   geom_smooth(
     data = tv %>% filter(year < 2020),
     method = "lm",
     colour = "blue",
     linetype = "dashed",
-    fullrange = TRUE
+    fullrange = TRUE,
+    se = FALSE
   )
 
 ```
 
 <br>
-<br>
-<br>
 
-The linear model so far is of the form `y ~ x` where y is the number of viewers and x is the week commencing. However the trends identified visually are not dependent on week commencing.
+The linear model so far is of the form `y ~ x` where y is the number of viewers and x is the week commencing. However the trends identified visually are not dependent on the factor 'week commencing' itself.
 
 1. The downwards trend is linked to the year of viewing.
 2. The seasonal viewing is linked to the quarter as there is lower viewing in the summer quarter and higher in the winter quarters.
-
-
-<br>
 <br>
 
-Plotted on the graph are the linear model giving `viewers ~ year` in red, `viewers ~ quarter` in green, and `viewers ~ year + quarter` in orange. Using just year gives the gradual decline over all, using just quarter shows the seasonal variation, whilst the combination of the two gives the best forecast showing both factors. This combined line is very similar to the simple `viewers ~ week_commencing` model plotted in black, but it is still far higher than the forecast using pre-covid data plotted in blue.
+Plotted on the graph are the linear models giving:
+* `viewers ~ year` in red, 
+* `viewers ~ quarter` in green
+*  `viewers ~ week` in orange
+* 
+
+Using just the year gives the gradual decline over all we would expect, whilst using just the quarter shows the seasonal variation. The  combination of the two gives the best forecast showing both factors. This combined forecast is very similar to the simple `viewers ~ week_commencing` model plotted in black, but it is still far higher than the forecast using pre-covid data plotted in blue.
 
 ```{r tv_make_trends, echo=FALSE}
 model_year <- lm(data = tv, formula = viewers ~ year)
@@ -441,12 +461,19 @@ forecast_year <-
   #rbind(tv %>% select(year, quarter, year_quarter, week_commencing, viewers))
 
 
-
 model_qtr <- lm(data = tv, formula = viewers ~ quarter)
 future_dates<- x_dates %>% filter(week_commencing > max(tv$week_commencing))
 forecast_qtr <-
   cbind(future_dates) %>%
   data.frame(viewers =  predict(model_qtr, future_dates)) #%>%
+  #rbind(tv %>% select(year, quarter, year_quarter, week_commencing, viewers))
+
+
+model_week <- lm(data = tv, formula = viewers ~ week)
+future_dates<- x_dates %>% filter(week_commencing > max(tv$week_commencing))
+forecast_week <-
+  cbind(future_dates) %>%
+  data.frame(viewers =  predict(model_week, future_dates)) #%>%
   #rbind(tv %>% select(year, quarter, year_quarter, week_commencing, viewers))
 
 
@@ -457,12 +484,18 @@ forecast_yr_qtr <-
   data.frame(viewers =  predict(model_yr_qtr, future_dates)) #%>%
   #rbind(tv %>% select(year, quarter, year_quarter, week_commencing, viewers))
 
+model_yr_week <- lm(data = tv, formula = viewers ~ year + week)
+future_dates<- x_dates %>% filter(week_commencing > max(tv$week_commencing))
+forecast_yr_week <-
+  cbind(future_dates) %>%
+  data.frame(viewers =  predict(model_yr_week, future_dates)) #%>%
+  #rbind(tv %>% select(year, quarter, year_quarter, week_commencing, viewers))
+
 
 
 ```
 
-fghjk
-
+<br>
 
 ```{r tv_add_trends, echo=FALSE}
 
@@ -471,14 +504,16 @@ tv_basic_graph +
     method = "lm",
     colour = "black",
     linetype = "dashed",
-    fullrange = TRUE
+    fullrange = TRUE,
+    se = FALSE
   ) +
   geom_smooth(
     data = tv %>% filter(year < 2020),
     method = "lm",
     colour = "blue",
     linetype = "dashed",
-    fullrange = TRUE
+    fullrange = TRUE,
+    se = FALSE
   ) +
   geom_line(
     data = forecast_year,
@@ -492,22 +527,147 @@ tv_basic_graph +
     data = forecast_qtr,
     size = 1.25,
     colour = "green",
-    linetype = "dashed",
+    #linetype = "dashed",
     fullrange = TRUE
   )+
     geom_line(
+    data = forecast_week,
+    size = 1.25,
+    colour = "purple",
+    #linetype = "dashed",
+    fullrange = TRUE
+  )
+  #   geom_line(
+  #   data = forecast_yr_qtr,
+  #   size = 1.25,
+  #   colour = "orange",
+  #   linetype = "dashed",
+  #   fullrange = TRUE
+  # )
+
+
+
+```
+```{r tv_add_group_trends, echo=FALSE}
+
+tv_basic_graph +
+  geom_smooth(
+    method = "lm",
+    colour = "black",
+    linetype = "dashed",
+    fullrange = TRUE,
+    se = FALSE
+  ) +
+  geom_smooth(
+    data = tv %>% filter(year < 2020),
+    method = "lm",
+    colour = "blue",
+    linetype = "dashed",
+    fullrange = TRUE,
+    se = FALSE
+  ) +
+  geom_line(
     data = forecast_yr_qtr,
     size = 1.25,
-    colour = "orange",
+    method = "lm",
+    colour = "green",
     linetype = "dashed",
+    fullrange = TRUE
+  ) +
+  geom_line(
+    data = forecast_yr_week,
+    size = 1.25,
+    colour = "purple",
+    #linetype = "dashed",
     fullrange = TRUE
   )
 
 
 
 ```
+<br>
+
+```{r tv_lm, echo=FALSE}
+
+lm_model_qtr <- lm(data = tv, formula = viewers ~ year + quarter + covid)
+future_dates<- x_dates %>% filter(week_commencing > max(tv$week_commencing)) %>% mutate(covid = 0)
+forecast_qtr <-
+  cbind(future_dates) %>%
+  data.frame(viewers =  predict(lm_model_qtr, future_dates))
+
+lm_model_wk <- lm(data = tv, formula = viewers ~ year + week + covid)
+future_dates<- x_dates %>% filter(week_commencing > max(tv$week_commencing)) %>% mutate(covid = 0)
+forecast_wk <-
+  cbind(future_dates) %>%
+  data.frame(viewers =  predict(lm_model_wk, future_dates))
 
 
+tv_basic_graph +
+  geom_smooth(
+    method = "lm",
+    colour = "black",
+    linetype = "dashed",
+    fullrange = TRUE,
+    se = FALSE
+  ) +
+  geom_smooth(
+    data = tv %>% filter(year < 2020),
+    method = "lm",
+    colour = "blue",
+    linetype = "dashed",
+    fullrange = TRUE,
+    se = FALSE
+  ) +
+      geom_line(
+    data = forecast_wk,
+    size = 1.25,
+    colour = "purple",
+    fullrange = TRUE
+  )+
+        geom_line(
+    data = forecast_qtr,
+    size = 1.25,
+    colour = "green",
+    fullrange = TRUE
+  )
+  
+
+```
+
+```{r tv_log, echo=FALSE}
+# tv<-tv %>% mutate(viewers = log(viewers) )
+
+lm_model <- lm(data = tv, formula = log(viewers) ~ year + quarter + covid)
+future_dates<- x_dates %>% filter(week_commencing > max(tv$week_commencing)) %>% mutate(covid = 0)
+forecast <-
+  cbind(future_dates) %>%
+  data.frame(viewers =  exp(predict(lm_model, future_dates)))
+
+
+tv_basic_graph +
+  geom_smooth(
+    method = "lm",
+    colour = "black",
+    linetype = "dashed",
+    fullrange = TRUE,
+    se = FALSE
+  ) +
+  geom_smooth(
+    data = tv %>% filter(year < 2020),
+    method = "lm",
+    colour = "blue",
+    linetype = "dashed",
+    fullrange = TRUE,
+    se = FALSE
+  ) +
+      geom_line(
+    data = forecast,
+    size = 1.25,
+    colour = "red",
+    linetype = "dashed",
+    fullrange = TRUE
+  )
+```
 
 
 
