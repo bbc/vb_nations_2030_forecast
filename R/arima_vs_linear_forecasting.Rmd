@@ -632,18 +632,217 @@ forecast_year_poly_week %>%
 
 ## ARIMA Modelling
 
+### ARIMA Modelling
+
+**A**uto-**R**egressive **I**ntegrated **M**oving **A**verage is a more complex forecasting technique that looks at auto-correlations, comparing the data at one period in time to the previous period.  
+
+The model is written in the form: 
+
+```
+forecast::Arima(
+  time_series, 
+  order  = c(p,d,q),
+  seasonal = list(order = c(P,D,Q), period = n),
+             include.drift = TRUE
+             )
+```
+where the terms given are (in brief)
+
+* data as a time series object
+* order terms for non-seasonal part of the data
+* seasonal terms for a given period (i.e. n = 52 for weekly)
+* 'p' is the number of terms to lag for in the auto-regressive component
+* 'q' is the number of times a differencing is applied
+* 'q' is the lag for the moving average
+
+<br>
+
+### Determining the components for the ARIMA Model
+
+<br>
+
+#### Converting to a time series
+
+The TV data is very simply converted to a time series. 
+
+```{r convert_to_ts, echo = TRUE}
+library(tseries);library(zoo);library(forecast)
+
+## the data frame
+tv %>% head()
+
+# Convert to time series
+data_ts<-ts(tv$viewers, 
+            freq= 365.25/7, #to get weeks in a year 
+            start=decimal_date(tv$week_commencing %>% min())
+)
+data_ts %>% head()
+
+## plot the data to show it's still of the same shape
+plot(data_ts)
+
+```
+
+
+<br>
+
+As discussed in the linear model section, a long term trend and a seasonal trend can both be identified visually but, whereas the linear model approximated relationships and added a simple x^3^ term to make the season trend appear correct, the ARIMA model uses statistical techniques to determine what trends are truly in the data.
+
+Decomposing the series is a good way to gain an initial understanding.
+
+```{r decompose, echo = TRUE}
+plot(decompose(data_ts))
+```
+
+The trend section of the data gives the biggest cause for concern as there is a downwards trend with a clear rise during the Covid dates. We know that rise is artificial and will no predict future trends so this suggests we may have to manipulate the data in advance to remove that. The season trend is clearly identified by and shows the trend we know to be true of a rise in the winter months and a drop in the summer. The final section was automatically identified as being random fluctuations. Here the Covid rise is clearly noticeable. 
+
+
+
+### Creating a stationary series
+
+A stationary series is one where the observed value does not depend on the time and neither do the statistical properties such as mean or variance. 
+
+Visually you can see fluctuation from day to day, but no seasonality and no trend over time. To check this statistically the Augmented Dickey Fuller (ADF) test is used. If the p-value is less than 0.05 there is 95% confidence in the null hypothesis and the series is stationary.
+
+
+```{r stationary_stats, echo=TRUE}
+## test for stationarity
+adf.test(data_ts)
+
+```
+
+The p-value is not below 0.05 so the data is not stationary. 
+
+Methods to make it stationary must then be used. 
+The most common way to do this is to take the difference between one observation and the next, then test again for stationarity. If that series is not stationary, the difference may be taken again. The log of the values is also often taken to reduce the effect of extreme variation in the size of values. 
+
+The function `ndiffs()` gives a suggested number of time the differencing is done.
+
+```{r take_diff, echo = TRUE}
+## What is the suggested differencing?
+ndiffs(data_ts)
+
+## What does this look like?
+plot(data_ts %>% log %>%  diff())
+abline(h=0, col="red")
+  
+## Test for stationarity
+adf.test(data_ts %>%log %>%  diff())
+
+
+```
+
+The p-value is now lower than the 0.05 threshold so the null hypothesis can be accepted and the data series deemed stationary. 
+As the data was differenced once to achieve this stationarity the ARIMA order value `d` had the value one. 
+
+### Seasonality and Cyclicity
+
+Visual observations and the decomposition plot clearly show seasonality and cyclicity so the auto-regressive and moving average parts will need be be identified. 
+
+To determine the values for the order terms `p` and `q` an auto-correlation plot (ACF) and a partial auto-correlation plot (PACF) are plotted. The ACF is created by looking at the correction of a term with the term once prior, then the term twice prior, then three times and so on. Below is an example of how this is done. 
+
+```{r acf_decomposition, echo = TRUE}
+## create the differenced data to mimic the differenced time series data
+x<-tv %>% select(viewers) %>% mutate(diff = log(viewers) - log(lag(viewers))) %>% tail(-1)
+head(x)
+
+## create three data sets with the actual data, one lag, and a second lag
+x_0 <- x$diff  %>% head(-1)
+x_1 <- x$diff %>% tail(-1)
+x_2 <- x$diff %>% tail(-2)
+## to illustrate the lags
+cbind(x_0,x_1,x_2) %>% head()
+
+## look at how correlated one lag is
+plot(x_0, x_1)
+abline(reg=lm(x_0 ~ x_1)) 
+text(0.2,0.3, paste0('cor = ',round(cor(x_0,x_1),2)))
+
+## look at how correlated two lag is
+plot(x_0 %>% head(-1), x_2)
+abline(reg=lm(x_0%>% head(-1) ~ x_2)) 
+text(0.2,0.3, paste0('cor = ',round(cor(x_0 %>% head(-1),x_2),2)))
+```
+
+The ACF plot find the correlations for many lags and plots them.  
+ 
+```{r acf_plot, echo = TRUE} 
+
+## the correlation coeficients for lags 1 and 2
+print(signif(cor(x_0,x_1),2) )
+print(signif(cor(x_0 %>% head(-1),x_2),2))
+
+## the ACF will find each coefficient and then plot the results. 
+acf(x$diff, plot = FALSE) %>% head(n=6)
+acf(x$diff )
+
+# Using the time series gives exactly the same result
+#acf(data_ts %>%log %>%  diff())
+```
+
+The correlation with lag one data is significant as it falls outside the threshold shown by the blue lines. This means the order value would be `q = 1`. 
+
+The second technique used a partial auto-correlation technique where the correlation is considered but any related confounding variables are removed. The PACF function is given below, and as with the ACF, as the lag 1 term is above the significance threshold the order factor is determined to be `p = 1`. 
+
+```{r pacf, echo = TRUE}
+pacf(x$diff, plot = FALSE) %>% head(n=6)
+pacf(x$diff )
+
+#pacf(data_ts %>%log %>%  diff()) equivalent for the time series data
+
+```
+
+### Non-Seasonal ARIMA
+
+From the test for stationarity, the ACF and PACF the order values for the arima were determined:
+
+* `p = 1`
+* `d = 1`
+* `q = 1`
+
+An ARIMA model can then be used to forecast the data.
+
+
+
+
+<!-- ## generally the value of y at time t is given by at least 3 factors -->
+<!-- # the previous value of y (t-1) multiplied by some scale factor 'a'  -->
+<!-- # a value 'b' dependent on time t  i.e. 'bt' -->
+<!-- # a constant value 'c' -->
+<!-- ## y(t) = c + bt + a y(t-1) -->
 
 
 
 
 
 
+An example of a stationary series is the change in Google stock price from one day to the next. The graph appears visually stationary about the mean of zero, but the Augmented Dickey-Fuller Test can be used to statistically test for stationarity.
+
+```{r stationary, echo=TRUE}
+library(quantmod)
+getSymbols("GOOGL", src = "yahoo")
+GOOGL <- dplyr::select(data.frame(date = index(GOOGL), coredata(GOOGL)), c('date','GOOGL.Close')) 
+
+## get google data and clean
+GOOGL<- data.frame(date = seq(as.Date(GOOGL$date %>% min() %>% ymd()),by = "day",length.out = 5805)) %>% ##get all days
+  left_join(GOOGL, by = 'date') %>% ## join in google data
+  fill(GOOGL.Close, .direction = "down") %>%  ### set the saturday/sunday price to previous working day
+  mutate( GOOGL.Close = log(GOOGL.Close)) ## take the log
+
+## turn to time series
+GOOGL<- ts(GOOGL$GOOGL.Close,
+            freq= 365.25, #to get weeks in a year
+            start=decimal_date(GOOGL$date %>% min()) )%>% diff()
+
+plot(GOOGL)
 
 
+### use the ADF test 
+adf.test(x=GOOGL)
 
+```
 
-
-
+The ADF test has a null hypothesis that there is a time dependent relationship and an alternative hypothesis that there is not, i.e the series is stationary. For this data the p-value is 0.01 which is below the 0.05 (5%) value showing that the result is statistically valid and the null hypotesis should be rejected and the alternative accepted. The data is stationary.
 
 
 
