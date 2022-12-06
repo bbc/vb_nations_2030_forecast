@@ -404,7 +404,7 @@ tv_graph
 Adding a simple linear trend to the graph produces the forecast shown below in black where a downwards trend is given. This trend has no seasonality and looks to be inflated by the higher than typical viewing during Covid. A blue trend line was also added which uses historic data from pre-Covid and shows a much steeper downwards trend. 
 
 <br>
-
+A rhyming poem about a work meeting where one colleague is evasive and refuses to share information when asked saying they are over works and git hub isn’t part of their job. They won’t do anyone any favours from this day forward.
 
 ```{r tv_simple_forecast, echo=FALSE}
 
@@ -634,9 +634,25 @@ forecast_year_poly_week %>%
 
 ### ARIMA Modelling
 
-**A**uto-**R**egressive **I**ntegrated **M**oving **A**verage is a more complex forecasting technique that looks at auto-correlations, comparing the data at one period in time to the previous period.  
+Generally, any time series can be written as a series of three components: a trend, a seasonal component and a random component.
 
-The model is written in the form: 
+**A**uto-**R**egressive **I**ntegrated **M**oving **A**verage is a more complex forecasting technique that looks at auto-correlations and moving averages, comparing the data at one period in time to the previous period.  
+
+
+The ARIMA model is mathematically of the form 
+
+$$ y_t =  \delta + \phi_1 y_{t-1} + ... \phi_1 y_{t-p} + \notag\\
+\theta_1 \epsilon_{t-1} + ... \theta_1 \epsilon_{t-q} + \epsilon_t$$
+
+The terms given on the top line make the auto-regressive part of the formula where the components dependent on previous values of $y$ at given times $t$ multiplied by a scale factor $\phi$. The previous $p$ number of terms are used. For example if `p = 2` then the value of y at the previous time $y_{t-1}$ and the previous time $y_{t-2}$ would be included. 
+
+The terms on the bottom line make the moving average part of the formula, where the difference between the previous value of y ($y_{t-1}$) and the moving average is given as $\epsilon_{t-1}$ multiplied by a scale factor $\theta$. Similar to the auto-regressive part, the previous $q$ terms are used. 
+
+
+The final terms $\delta$ and $\epsilon_{t}$ are essentially a white noise component with $\delta$ a constant and $\epsilon_{t}$ an error term for the given time.
+
+
+The model is written in R in the form: 
 
 ```
 forecast::Arima(
@@ -652,7 +668,7 @@ where the terms given are (in brief)
 * order terms for non-seasonal part of the data
 * seasonal terms for a given period (i.e. n = 52 for weekly)
 * 'p' is the number of terms to lag for in the auto-regressive component
-* 'q' is the number of times a differencing is applied
+* 'd' is the number of times a differencing is applied
 * 'q' is the lag for the moving average
 
 <br>
@@ -694,7 +710,7 @@ Decomposing the series is a good way to gain an initial understanding.
 plot(decompose(data_ts))
 ```
 
-The trend section of the data gives the biggest cause for concern as there is a downwards trend with a clear rise during the Covid dates. We know that rise is artificial and will no predict future trends so this suggests we may have to manipulate the data in advance to remove that. The season trend is clearly identified by and shows the trend we know to be true of a rise in the winter months and a drop in the summer. The final section was automatically identified as being random fluctuations. Here the Covid rise is clearly noticeable. 
+The trend section of the data gives the biggest cause for concern as there is a downwards trend with a clear rise during the Covid dates. We know that rise is artificial and will not predict future trends so this suggests we may have to manipulate the data in advance to remove that. The season trend is clearly identified and shows the trend we know to be true of a rise in the winter months and a drop in the summer. The final section was automatically identified as being random fluctuations. Here the Covid rise is clearly noticeable. 
 
 
 
@@ -702,7 +718,7 @@ The trend section of the data gives the biggest cause for concern as there is a 
 
 A stationary series is one where the observed value does not depend on the time and neither do the statistical properties such as mean or variance. 
 
-Visually you can see fluctuation from day to day, but no seasonality and no trend over time. To check this statistically the Augmented Dickey Fuller (ADF) test is used. If the p-value is less than 0.05 there is 95% confidence in the null hypothesis and the series is stationary.
+In a stationary series visually you would be able to see fluctuation from day to day, but no seasonality and no trend over time. To check this statistically the Augmented Dickey Fuller (ADF) test is used. If the p-value is less than 0.05 there is 95% confidence in the null hypothesis and the series is stationary.
 
 
 ```{r stationary_stats, echo=TRUE}
@@ -733,13 +749,16 @@ adf.test(data_ts %>%log %>%  diff())
 ```
 
 The p-value is now lower than the 0.05 threshold so the null hypothesis can be accepted and the data series deemed stationary. 
-As the data was differenced once to achieve this stationarity the ARIMA order value `d` had the value one. 
+As the data was differenced once to achieve this stationarity the ARIMA order value `d` takes the value one. 
+
+<br>
+<br>
 
 ### Seasonality and Cyclicity
 
 Visual observations and the decomposition plot clearly show seasonality and cyclicity so the auto-regressive and moving average parts will need be be identified. 
 
-To determine the values for the order terms `p` and `q` an auto-correlation plot (ACF) and a partial auto-correlation plot (PACF) are plotted. The ACF is created by looking at the correction of a term with the term once prior, then the term twice prior, then three times and so on. Below is an example of how this is done. 
+To determine the values for the order terms `p` and `q` an auto-correlation plot (ACF) and a partial auto-correlation plot (PACF) are plotted. The ACF is created by looking at the correlation of a term with the term once prior, then the term twice prior, then three times and so on. Below is an example of how this is done manually and with one simple line of code. 
 
 ```{r acf_decomposition, echo = TRUE}
 ## create the differenced data to mimic the differenced time series data
@@ -764,7 +783,7 @@ abline(reg=lm(x_0%>% head(-1) ~ x_2))
 text(0.2,0.3, paste0('cor = ',round(cor(x_0 %>% head(-1),x_2),2)))
 ```
 
-The ACF plot find the correlations for many lags and plots them.  
+The correlations for the first two logs that were done manually are given below. Comparatively, the ACF plot finds the correlations for many lags and plots them.  
  
 ```{r acf_plot, echo = TRUE} 
 
@@ -774,7 +793,7 @@ print(signif(cor(x_0 %>% head(-1),x_2),2))
 
 ## the ACF will find each coefficient and then plot the results. 
 acf(x$diff, plot = FALSE) %>% head(n=6)
-acf(x$diff )
+acf(x$diff, plot = TRUE )
 
 # Using the time series gives exactly the same result
 #acf(data_ts %>%log %>%  diff())
@@ -782,7 +801,8 @@ acf(x$diff )
 
 The correlation with lag one data is significant as it falls outside the threshold shown by the blue lines. This means the order value would be `q = 1`. 
 
-The second technique used a partial auto-correlation technique where the correlation is considered but any related confounding variables are removed. The PACF function is given below, and as with the ACF, as the lag 1 term is above the significance threshold the order factor is determined to be `p = 1`. 
+
+The second technique uses a partial auto-correlation technique where the correlation is considered but any related confounding variables are removed. The PACF function is given below, and as with the ACF, as the lag 1 term is above the significance threshold the order factor is determined to be `p = 1`. 
 
 ```{r pacf, echo = TRUE}
 pacf(x$diff, plot = FALSE) %>% head(n=6)
@@ -792,18 +812,115 @@ pacf(x$diff )
 
 ```
 
+<br>
+
+
 ### Non-Seasonal ARIMA
 
-From the test for stationarity, the ACF and PACF the order values for the arima were determined:
+From the test for stationarity, the ACF, and the PACF the order values for the ARIMA were determined:
 
 * `p = 1`
 * `d = 1`
 * `q = 1`
 
-An ARIMA model can then be used to forecast the data.
+An ARIMA model can then be used to forecast the data and provides a series of coefficients. 
+
+```{r make_non_seasonal_arima, echo=TRUE}
+
+fit <- forecast::Arima(data_ts %>% log(), 
+                       order  = c(1,1,1),
+                        method = 'CSS')
+fit
+```
+
+The general equation 
+$$ y_t =  \delta + \phi_1 y_{t-1} + ... \phi_1 y_{t-p} + \notag\\
+\theta_1 \epsilon_{t-1} + ... \theta_1 \epsilon_{t-q} + \epsilon_t$$
+
+can be re-written as 
+$$ y_t -y_{t-1}  =  \delta + 0.0633 y_{t-1} + \notag\\
+-0.5094 \epsilon_{t-1} + \epsilon_t$$
+
+The $y_t -y_{t-1}$ term is because the differenced data is being used and the coefficients are given by the model.
+
+<br>
+
+#### Notes for Andy
+
+```{r mimic_arima, echo = TRUE}
+
+## attempt to mimic the process of the ARIMA model
+data.frame(y = data_ts %>% log() %>% as.numeric() ) %>%
+  mutate(lag_y = lag(y), # the previous value of y
+         lag_err = lag(y) - lag(y, n=2), #calculating the average of the two prior values
+         AR = fit[["model"]][["phi"]]*lag_y, ## autoregression part
+         MA = fit[["model"]][["theta"]] * lag_err, ## moving average part
+          pred = lag_y + AR + MA
+         ) %>% 
+  cbind(data.frame(fitted = fit[["fitted"]]) ) %>% head(n=10)
+
+
+```
+
+
+This mimic does not include the $\delta$ term or the $\epsilon_{t}$ term. 
+
+
+The equation given at the top is what i think it is from reading, and looking at a course I went on.
+
+
+* $\delta + \epsilon_t$ - this part is a white noise component, some stable value + random error
+
+* $\phi_1 y_{t-1} + ... \phi_1 y_{t-p}$ this bit is the AR part looking at the prior values, and for our case p= 1.
+
+* $\theta_1 \epsilon_{t-1} + ... \theta_1 \epsilon_{t-q}$  is the MA part, but I'm not exactly sure over how many previous terms the average is calculated. (our case has q=1)
+
+
+The AR part I think seems ok as it uses the previous y value and the coefficient is given in the model.
+
+The MA part i think uses the average of the two prior terms, but i'm not sure about this. 
+I read that some models give a random starting point for the first value which would then affect the error term that goes in the model.
+
+I also don't get how you can have $\epsilon_{t}$ when you're looking at time t.
+
+.. and this is where i did a lot of reading and think i just did move thinking.
+<br>
+
+### Evaluating the model
+
+The residuals from the fit should appear as white noise. 
+
+```{r residuals, echo  = TRUE}
+checkresiduals(fit)
+pred <- predict(fit, n.ahead = 52*9)
+
+#ts.plot(2.718^pred$pred, log = "y", lty = c(1,3), xlab="time", ylab = "viewers (mil)")
+ts.plot(data_ts , 2.718^pred$pred, log = "y", lty = c(1,3), xlab="time",ylab = "viewers (mil)")
+
+x<-data.frame(log_data = data_ts %>% log())
+
+x %>% head()  %>%
+  mutate(previous_y = lag(log_data)) %>%
+  mutate(diff = log_data - previous_y) %>%
+  mutate(new_diff = 1 + 0.0633 * diff - 0.5095 * diff) %>%
+  mutate(new_y = previous_y + new_diff) %>%
+  cbind(data.frame(fitted = fit[["fitted"]]) %>% head()) %>%
+  mutate(missing = new_y - fitted)
+
+cbind(x = fit[["x"]],
+      fitted = fit[["fitted"]],
+      residuals = fit[["residuals"]]) %>% data.frame() %>%
+  mutate(diff = x - fitted) %>%
+  head()
 
 
 
+
+```
+
+
+$$ y_t =  \delta + 0.0633 y_{t-1} \notag\\
+\epsilon + -0.5094 y_{t-1} $$
 
 <!-- ## generally the value of y at time t is given by at least 3 factors -->
 <!-- # the previous value of y (t-1) multiplied by some scale factor 'a'  -->
@@ -818,30 +935,32 @@ An ARIMA model can then be used to forecast the data.
 
 An example of a stationary series is the change in Google stock price from one day to the next. The graph appears visually stationary about the mean of zero, but the Augmented Dickey-Fuller Test can be used to statistically test for stationarity.
 
-```{r stationary, echo=TRUE}
-library(quantmod)
-getSymbols("GOOGL", src = "yahoo")
-GOOGL <- dplyr::select(data.frame(date = index(GOOGL), coredata(GOOGL)), c('date','GOOGL.Close')) 
+<!-- ```{r stationary, echo=TRUE} -->
+<!-- library(quantmod) -->
+<!-- getSymbols("GOOGL", src = "yahoo") -->
+<!-- GOOGL <- dplyr::select(data.frame(date = index(GOOGL), coredata(GOOGL)), c('date','GOOGL.Close'))  -->
 
-## get google data and clean
-GOOGL<- data.frame(date = seq(as.Date(GOOGL$date %>% min() %>% ymd()),by = "day",length.out = 5805)) %>% ##get all days
-  left_join(GOOGL, by = 'date') %>% ## join in google data
-  fill(GOOGL.Close, .direction = "down") %>%  ### set the saturday/sunday price to previous working day
-  mutate( GOOGL.Close = log(GOOGL.Close)) ## take the log
+<!-- ## get google data and clean -->
+<!-- GOOGL<- data.frame(date = seq(as.Date(GOOGL$date %>% min() %>% ymd()),by = "day",length.out = 5805)) %>% ##get all days -->
+<!--   left_join(GOOGL, by = 'date') %>% ## join in google data -->
+<!--   fill(GOOGL.Close, .direction = "down") %>%  ### set the saturday/sunday price to previous working day -->
+<!--   mutate( GOOGL.Close = log(GOOGL.Close)) ## take the log -->
 
-## turn to time series
-GOOGL<- ts(GOOGL$GOOGL.Close,
-            freq= 365.25, #to get weeks in a year
-            start=decimal_date(GOOGL$date %>% min()) )%>% diff()
+<!-- ## turn to time series -->
+<!-- GOOGL<- ts(GOOGL$GOOGL.Close, -->
+<!--             freq= 365.25, #to get weeks in a year -->
+<!--             start=decimal_date(GOOGL$date %>% min()) )%>% diff() -->
 
-plot(GOOGL)
+<!-- plot(GOOGL) -->
 
 
-### use the ADF test 
-adf.test(x=GOOGL)
+<!-- ### use the ADF test  -->
+<!-- adf.test(x=GOOGL) -->
 
-```
+<!-- ``` -->
 
+
+<br>
 The ADF test has a null hypothesis that there is a time dependent relationship and an alternative hypothesis that there is not, i.e the series is stationary. For this data the p-value is 0.01 which is below the 0.05 (5%) value showing that the result is statistically valid and the null hypotesis should be rejected and the alternative accepted. The data is stationary.
 
 
