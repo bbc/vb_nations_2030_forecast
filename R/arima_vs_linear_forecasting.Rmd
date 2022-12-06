@@ -845,7 +845,7 @@ The $y_t -y_{t-1}$ term is because the differenced data is being used and the co
 
 <br>
 
-#### Notes for Andy
+#### Notes for Andy/Rioch
 
 ```{r mimic_arima, echo = TRUE}
 

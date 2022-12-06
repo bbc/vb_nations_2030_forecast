@@ -4737,8 +4737,8 @@ fit</code></pre>
 the differenced data is being used and the coefficients are given by the
 model.</p>
 <p><br></p>
-<div id="notes-for-andy" class="section level4">
-<h4>Notes for Andy</h4>
+<div id="notes-for-andyrioch" class="section level4">
+<h4>Notes for Andy/Rioch</h4>
 <pre class="r"><code>## attempt to mimic the process of the ARIMA model
 data.frame(y = data_ts %&gt;% log() %&gt;% as.numeric() ) %&gt;%
   mutate(lag_y = lag(y), # the previous value of y
