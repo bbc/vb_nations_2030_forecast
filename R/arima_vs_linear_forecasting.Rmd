@@ -220,8 +220,9 @@ new_year<- tv %>% group_by(year) %>% filter(week_commencing == min(week_commenci
 
 ### radio Graph
 ggplot(data = tv,
-       aes(x = week_commencing, y = viewers))+
-  geom_point(colour = 'red')+
+       aes(x = week_commencing))+
+  geom_point(aes(y = viewers), colour = 'red')+
+  #geom_point(aes(y = viewers), colour = 'blue')+
   scale_y_continuous(
     label = comma,
     limits = ~ c(0, max(.x) * 1.1),
@@ -294,7 +295,7 @@ tv %>%
     escape = F
   ) %>%
   kable_styling(bootstrap_options = c("striped", "scale_down", "hover")) %>%
-  scroll_box(height = "800px")
+  scroll_box(height = "400px")
 
 ```
 
@@ -404,7 +405,7 @@ tv_graph
 Adding a simple linear trend to the graph produces the forecast shown below in black where a downwards trend is given. This trend has no seasonality and looks to be inflated by the higher than typical viewing during Covid. A blue trend line was also added which uses historic data from pre-Covid and shows a much steeper downwards trend. 
 
 <br>
-A rhyming poem about a work meeting where one colleague is evasive and refuses to share information when asked saying they are over works and git hub isn’t part of their job. They won’t do anyone any favours from this day forward.
+
 
 ```{r tv_simple_forecast, echo=FALSE}
 
@@ -488,7 +489,7 @@ Plotted on the graph are the linear models giving:
 
 
 
-Using just the year gives the gradual decline over all we would expect, whilst using just the quarter or just the week shows a seasonal variation. However, the seasonal trend identifiable shows lower viewing in the summer months and higher viewing in the winter, but both the quarter and week linear model show the highest point at new year and a gradual decline throughout the year which is not correct. 
+Using the `year` gives the gradual decline over all we would expect, whilst using the `quarter` or the `week` shows a seasonal variation. However, the seasonal trend identifiable shows lower viewing in the summer months and higher viewing in the winter, but both the quarter and week linear model show the highest point at new year and a gradual decline throughout the year which is not correct. 
 
 
 ```{r tv_make_trends, echo=FALSE}
@@ -615,12 +616,33 @@ tv_basic_graph +
 <br>
 
 ```{r tv_forecast, echo = FALSE}
-forecast_year_poly_week %>% 
-  group_by(year, quarter) %>% 
-  summarise(weekly_viewers = comma(signif(mean(viewers),2))) %>% 
-  filter(paste0(year,quarter)>'20223' ) %>% 
+forecast_year_poly_week %>% head()
+all_data<- 
+  tv %>%
+  filter(region == 'England') %>%
+  group_by(year) %>%
+  summarise(weekly_viewers = mean(viewers)) %>%
+  rbind(
+    forecast_year_poly_week %>%
+      group_by(year) %>%
+      summarise(weekly_viewers = mean(viewers))
+      )
+
+all_data %>% 
+ cbind(
+    all_data %>% 
+      filter(year == 2017) %>% 
+      ungroup() %>% 
+      select(weekly_viewers) %>% 
+      rename(viewers2017 = weekly_viewers)
+    ) %>% 
+  mutate(percentage_decrease = 
+           signif(100 * (weekly_viewers-viewers2017 ) /
+                                            viewers2017 , 2)) %>% select(-viewers2017) %>%
+mutate  (weekly_viewers = comma(signif(weekly_viewers, 2))) %>% 
+  
   kbl(booktabs = T, caption = "Forecast wiewers numbers for England local News",
-      col.names = c("year", "quarter", " average weekly viewers"),
+      col.names = c("year", " average weekly viewers", "percentage decrease from 2017"),
     escape = F) %>%
   kable_styling(bootstrap_options =c("striped", "scale_down","hover"))
 
@@ -639,20 +661,25 @@ Generally, any time series can be written as a series of three components: a tre
 **A**uto-**R**egressive **I**ntegrated **M**oving **A**verage is a more complex forecasting technique that looks at auto-correlations and moving averages, comparing the data at one period in time to the previous period.  
 
 
-The ARIMA model is mathematically of the form 
+The ARIMA model is mathematically of the form
 
-$$ y_t =  \delta + \phi_1 y_{t-1} + ... \phi_1 y_{t-p} + \notag\\
-\theta_1 \epsilon_{t-1} + ... \theta_1 \epsilon_{t-q} + \epsilon_t$$
+$\begin{aligned}
+y_t = 
+  &  \delta + \epsilon_t + \\
+  &  \phi_1 y_{t-1} + ... \phi_{1} y_{t-p} + \\
+  &  \theta_1 \epsilon_{t-1} + ... \theta_{1} \epsilon_{t-q} 
+\end{aligned}$
 
-The terms given on the top line make the auto-regressive part of the formula where the components dependent on previous values of $y$ at given times $t$ multiplied by a scale factor $\phi$. The previous $p$ number of terms are used. For example if `p = 2` then the value of y at the previous time $y_{t-1}$ and the previous time $y_{t-2}$ would be included. 
+The first terms $\delta$ and $\epsilon_{t}$ are essentially a white noise component with $\delta$ a constant and $\epsilon_{t}$ an error term for the given time which shows the deviation from the constant $\delta$.
 
-The terms on the bottom line make the moving average part of the formula, where the difference between the previous value of y ($y_{t-1}$) and the moving average is given as $\epsilon_{t-1}$ multiplied by a scale factor $\theta$. Similar to the auto-regressive part, the previous $q$ terms are used. 
+The terms given on the next line make the auto-regressive part of the formula where the components dependent on previous values of $y$ at given times $t$ multiplied by a scale factor $\phi$. The previous $p$ number of terms are used. For example if `p = 2` then the value of y at the previous time $y_{t-1}$ and the previous time $y_{t-2}$ would be included. 
+
+The terms on the bottom line make the moving average part of the formula, where the difference between the previous value of y (written as $y_{t-1}$) and the moving average is given as $\epsilon_{t-1}$ multiplied by a scale factor $\theta$. Similar to the auto-regressive part, the previous $q$ terms are used. 
 
 
-The final terms $\delta$ and $\epsilon_{t}$ are essentially a white noise component with $\delta$ a constant and $\epsilon_{t}$ an error term for the given time.
 
-
-The model is written in R in the form: 
+<br>
+The ARIMA model is written in R in the form: 
 
 ```
 forecast::Arima(
@@ -675,6 +702,62 @@ where the terms given are (in brief)
 
 ### Determining the components for the ARIMA Model
 
+<br>
+
+#####  Accounting for Covid
+With the linear model it was simple to add in the Covid factor as a variable. The ARIMA process doesn't have this option so the initial data set will be scaled based on the covid factor make this example process simpler
+.
+This is show below with the red points the true data for the Covid period and the blue points the scaled values. The data pre and post Covid remains the same.
+<br>
+
+```{r tv_covid, echo=FALSE}
+x_dates <-
+  tv %>% group_by(year) %>% filter(quarter == 1) %>% select(week_commencing) %>% filter(week_commencing == min(week_commencing)) %>% ungroup() %>% mutate(year = year(week_commencing))
+
+new_year<- tv %>% group_by(year) %>% filter(week_commencing == min(week_commencing)) %>% select(week_commencing, year, quarter, year_quarter)
+
+
+### tv Graph
+ggplot(data = tv,
+       aes(x = week_commencing))+
+  geom_point(aes(y = viewers), colour = 'red')+
+  geom_point(aes(y = viewers +(4500000*covid) ), colour = 'blue')+
+  scale_y_continuous(
+    label = comma,
+    limits = ~ c(0, max(.x) * 1.1),
+    n.breaks = 10
+  )+
+  theme(
+    axis.text.x = element_text(angle = 90),
+    panel.grid.major.y = element_line(size = .1, color = "grey") ,
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    legend.title=element_blank(),
+    legend.position="none"
+  ) +
+  labs(title = "BARB England local News Viewers") +
+  xlab("year")+
+  geom_vline(
+    xintercept = new_year$week_commencing,
+    linetype = "dashed",
+    color = "grey"
+  )+
+  scale_x_date(
+    limits = as.Date(c(tv$week_commencing %>% min(),tv$week_commencing %>% max() )),
+    labels = date_format("%Y-%m-%d"),
+    breaks = x_dates$week_commencing,
+    sec.axis = sec_axis(
+      name = NULL,
+      trans = ~ .,
+      labels = function(x) format(as.yearqtr(x), "%Y")
+    )
+  )
+
+tv<- tv %>% mutate(viewers = viewers +(4500000*covid))
+
+
+```
 <br>
 
 #### Converting to a time series
@@ -710,7 +793,7 @@ Decomposing the series is a good way to gain an initial understanding.
 plot(decompose(data_ts))
 ```
 
-The trend section of the data gives the biggest cause for concern as there is a downwards trend with a clear rise during the Covid dates. We know that rise is artificial and will not predict future trends so this suggests we may have to manipulate the data in advance to remove that. The season trend is clearly identified and shows the trend we know to be true of a rise in the winter months and a drop in the summer. The final section was automatically identified as being random fluctuations. Here the Covid rise is clearly noticeable. 
+The trend section of the data shows the general decline but shows a leveling off during Covid.  The season trend is clearly identified and shows the trend we know to be true of a rise in the winter months and a drop in the summer. The final section was automatically identified as being random fluctuations. 
 
 
 
@@ -727,10 +810,9 @@ adf.test(data_ts)
 
 ```
 
-The p-value is not below 0.05 so the data is not stationary. 
+The p-value is below 0.05 suggesting the data is stationary, but visual observations very much suggest it isn't. 
 
-Methods to make it stationary must then be used. 
-The most common way to do this is to take the difference between one observation and the next, then test again for stationarity. If that series is not stationary, the difference may be taken again. The log of the values is also often taken to reduce the effect of extreme variation in the size of values. 
+The most common way to make a series stationary is to take the difference between one observation and the next, then test again for stationarity. If that series is not stationary, the difference may be taken again. The log of the values is also often taken to reduce the effect of extreme variation in the size of values. 
 
 The function `ndiffs()` gives a suggested number of time the differencing is done.
 
@@ -748,7 +830,7 @@ adf.test(data_ts %>%log %>%  diff())
 
 ```
 
-The p-value is now lower than the 0.05 threshold so the null hypothesis can be accepted and the data series deemed stationary. 
+The p-value is now lower than before, and lower than the 0.05 threshold so the null hypothesis can be accepted and the data series deemed stationary. 
 As the data was differenced once to achieve this stationarity the ARIMA order value `d` takes the value one. 
 
 <br>
@@ -762,7 +844,7 @@ To determine the values for the order terms `p` and `q` an auto-correlation plot
 
 ```{r acf_decomposition, echo = TRUE}
 ## create the differenced data to mimic the differenced time series data
-x<-tv %>% select(viewers) %>% mutate(diff = log(viewers) - log(lag(viewers))) %>% tail(-1)
+x<-tv %>% select(viewers) %>% mutate(diff = log(viewers) - log(lag(viewers)))%>% tail(-1)
 head(x)
 
 ## create three data sets with the actual data, one lag, and a second lag
@@ -793,7 +875,8 @@ print(signif(cor(x_0 %>% head(-1),x_2),2))
 
 ## the ACF will find each coefficient and then plot the results. 
 acf(x$diff, plot = FALSE) %>% head(n=6)
-acf(x$diff, plot = TRUE )
+acf(x$diff, plot = TRUE, lag = 120 )
+
 
 # Using the time series gives exactly the same result
 #acf(data_ts %>%log %>%  diff())
@@ -801,21 +884,24 @@ acf(x$diff, plot = TRUE )
 
 The correlation with lag one data is significant as it falls outside the threshold shown by the blue lines. This means the order value would be `q = 1`. 
 
+Within this plot there are two peaks falling just outside the threshold around lag 50 and lag 100 suggesting an annual correlation. This suggests that there is a seasonal component for the model so `Q = 1` would be a good starting point.
 
 The second technique uses a partial auto-correlation technique where the correlation is considered but any related confounding variables are removed. The PACF function is given below, and as with the ACF, as the lag 1 term is above the significance threshold the order factor is determined to be `p = 1`. 
 
 ```{r pacf, echo = TRUE}
 pacf(x$diff, plot = FALSE) %>% head(n=6)
-pacf(x$diff )
+pacf(x$diff, lag = 120 )
+
 
 #pacf(data_ts %>%log %>%  diff()) equivalent for the time series data
 
 ```
-
+ Here there seems to be another spike at around 100 or two years, suggesting there may be a seasonal P component, but as there is not a similar peak around week 52 this is less clear.
+ 
 <br>
 
 
-### Non-Seasonal ARIMA
+### Modelling using ARIMA
 
 From the test for stationarity, the ACF, and the PACF the order values for the ARIMA were determined:
 
@@ -824,94 +910,265 @@ From the test for stationarity, the ACF, and the PACF the order values for the A
 * `q = 1`
 
 An ARIMA model can then be used to forecast the data and provides a series of coefficients. 
+The seasonal components P,D,Q are harder to identify. The ACF and PCF suggested seasonal components should be included. Initially use the same values as the order terms, with the period 52 weeks.
 
-```{r make_non_seasonal_arima, echo=TRUE}
+```{r make_seasonal_arima, echo=TRUE}
 
 fit <- forecast::Arima(data_ts %>% log(), 
                        order  = c(1,1,1),
-                        method = 'CSS')
+                       seasonal = list(order = c(1,1,1), period = 52),
+                       #include.drift = TRUE,
+                        method = 'CSS'
+                       )
 fit
 ```
+The general equation is of the form
 
-The general equation 
-$$ y_t =  \delta + \phi_1 y_{t-1} + ... \phi_1 y_{t-p} + \notag\\
-\theta_1 \epsilon_{t-1} + ... \theta_1 \epsilon_{t-q} + \epsilon_t$$
+$\begin{aligned}
+y_t = 
+  &  \delta + \epsilon_t + \\
+  &  \phi_1 y_{t-1} + ... \phi_{1} y_{t-p} + \\
+  &  \theta_1 \epsilon_{t-1} + ... \theta_{1} \epsilon_{t-q} 
+\end{aligned}$
 
-can be re-written as 
-$$ y_t -y_{t-1}  =  \delta + 0.0633 y_{t-1} + \notag\\
--0.5094 \epsilon_{t-1} + \epsilon_t$$
+
+With the coefficients given this can be re-written as 
+
+$\begin{aligned}
+y_t -y_{t-1} = 
+              &  \delta + \epsilon_t + \\
+              &  0.2551 y_{t-1} + ... \phi_{1} y_{t-p} + \\
+              &  -0.829 \epsilon_{t-1} + ... \theta_{1} \epsilon_{t-q} 
+\end{aligned}$
 
 The $y_t -y_{t-1}$ term is because the differenced data is being used and the coefficients are given by the model.
 
+Once the moving average and autocorrelation parts are calculated, all that should remain is the white noise component. 
+
+The seasonal MA and AR components mathematically look the same, but have different values for the co-efficient and use the lag of the previous seasonal value. For example $\phi_1 y_{t-1}$ for seasonal with period 52 weeks would take value $-0.3403 y_{t-52}$. 
+
 <br>
 
-#### Notes for Andy/Rioch
-
-```{r mimic_arima, echo = TRUE}
-
-## attempt to mimic the process of the ARIMA model
-data.frame(y = data_ts %>% log() %>% as.numeric() ) %>%
-  mutate(lag_y = lag(y), # the previous value of y
-         lag_err = lag(y) - lag(y, n=2), #calculating the average of the two prior values
-         AR = fit[["model"]][["phi"]]*lag_y, ## autoregression part
-         MA = fit[["model"]][["theta"]] * lag_err, ## moving average part
-          pred = lag_y + AR + MA
-         ) %>% 
-  cbind(data.frame(fitted = fit[["fitted"]]) ) %>% head(n=10)
-
-
-```
-
-
-This mimic does not include the $\delta$ term or the $\epsilon_{t}$ term. 
-
-
-The equation given at the top is what i think it is from reading, and looking at a course I went on.
-
-
-* $\delta + \epsilon_t$ - this part is a white noise component, some stable value + random error
-
-* $\phi_1 y_{t-1} + ... \phi_1 y_{t-p}$ this bit is the AR part looking at the prior values, and for our case p= 1.
-
-* $\theta_1 \epsilon_{t-1} + ... \theta_1 \epsilon_{t-q}$  is the MA part, but I'm not exactly sure over how many previous terms the average is calculated. (our case has q=1)
-
-
-The AR part I think seems ok as it uses the previous y value and the coefficient is given in the model.
-
-The MA part i think uses the average of the two prior terms, but i'm not sure about this. 
-I read that some models give a random starting point for the first value which would then affect the error term that goes in the model.
-
-I also don't get how you can have $\epsilon_{t}$ when you're looking at time t.
-
-.. and this is where i did a lot of reading and think i just did move thinking.
-<br>
 
 ### Evaluating the model
 
 The residuals from the fit should appear as white noise. 
 
 ```{r residuals, echo  = TRUE}
+
 checkresiduals(fit)
+
+```
+
+Plotting the residuals shows a stationary series with no trend. The residuals are normally distributed around a mean of one. The autocorrelation of the residuals shows a significant peak around lag 50. This suggests the seasonal term value P,D,Q may need altering. 
+
+
+```{r predict, echo = TRUE}
 pred <- predict(fit, n.ahead = 52*9)
 
-#ts.plot(2.718^pred$pred, log = "y", lty = c(1,3), xlab="time", ylab = "viewers (mil)")
 ts.plot(data_ts , 2.718^pred$pred, log = "y", lty = c(1,3), xlab="time",ylab = "viewers (mil)")
+```
 
-x<-data.frame(log_data = data_ts %>% log())
+The prediction into the future looks fairly good, but as the ACF residual has a significant value it would be worth comparing to a slightly different value. 
 
-x %>% head()  %>%
-  mutate(previous_y = lag(log_data)) %>%
-  mutate(diff = log_data - previous_y) %>%
-  mutate(new_diff = 1 + 0.0633 * diff - 0.5095 * diff) %>%
-  mutate(new_y = previous_y + new_diff) %>%
-  cbind(data.frame(fitted = fit[["fitted"]]) %>% head()) %>%
-  mutate(missing = new_y - fitted)
+Using seasonal components `P,Q,D` of `1,1,0` and `0,1,1` does not change the residual in the ACF that is significant, but using `1,0,1` does remove it however, as show below, that change produces no usable forecast. 
 
-cbind(x = fit[["x"]],
-      fitted = fit[["fitted"]],
-      residuals = fit[["residuals"]]) %>% data.frame() %>%
-  mutate(diff = x - fitted) %>%
-  head()
+```{r make_seasonal_arima_2, echo=TRUE}
+
+fit2 <- forecast::Arima(data_ts %>% log(),
+                       order  = c(1,1,1),
+                       seasonal = list(order = c(1,0,1), period = 52),
+                       #include.drift = TRUE,
+                        method = 'CSS'
+                       )
+fit2
+checkresiduals(fit2)
+pred2 <- predict(fit2, n.ahead = 52*9)
+ts.plot(data_ts , 2.718^pred2$pred, log = "y", lty = c(1,3), xlab="time",ylab = "viewers (mil)")
+```
+
+
+#### Auto Arima
+
+A useful technique is to use the `auto.arima` function as a starting point for deciding upon the components `p,d,q` and `P,D,Q`. 
+
+For this case, the auto arima function gives `ARIMA(0,1,1)(0,0,1)[52]` which is quite different to that manually decided upon from observing the plots. The auto arima residuals are very good, showing white noise behaviour, but the forecast is not usable. 
+
+````{r auto_arima, echo = TRUE}
+
+auto_fit <- forecast::auto.arima(data_ts %>% log())
+auto_fit
+checkresiduals(auto_fit)
+auto_pred <- predict(auto_fit, n.ahead = 52*9)
+ts.plot(data_ts , 2.718^auto_pred$pred, log = "y", lty = c(1,3), xlab="time",ylab = "viewers (mil)")
+
+
+```
+
+
+
+<!-- #### Monthly -->
+
+<!-- Some literature suggests that ARIMA modelling struggles with long seasonality such an the annual seasons in this data. To see if the forecast can be improved a monthly forecast can be attempted. -->
+
+<!-- ```{r monthly_arima, echo = TRUE} -->
+
+<!-- monthly_tv<- tv %>%  -->
+<!--   mutate(month = month(week_commencing)) %>%  -->
+<!--   group_by(year, month) %>% -->
+<!--   mutate(viewers = mean(viewers)) %>%  -->
+<!--   filter(week_commencing == min(week_commencing)) -->
+
+<!-- monthly_ts<-ts(monthly_tv$viewers,  -->
+<!--             freq= 12,  -->
+<!--             start=decimal_date(tv$week_commencing %>% min()) -->
+<!-- ) -->
+<!-- monthly_ts %>% head() -->
+
+<!-- plot(monthly_ts) -->
+<!-- plot(decompose(monthly_ts)) -->
+<!-- ndiffs(monthly_ts) #1 -->
+<!-- plot(monthly_ts %>% log %>%  diff()) -->
+<!-- abline(h=0, col="red") -->
+<!-- acf(monthly_ts %>% log %>%  diff(), plot = TRUE, lag = 60 ) #q = 0  -->
+<!-- pacf(monthly_ts %>% log %>%  diff(), plot = TRUE, lag = 60 ) #p = 0 -->
+
+
+<!-- monthly_fit <- forecast::Arima(monthly_ts %>% log(), -->
+<!--                        order  = c(1,0,0), -->
+<!--                        seasonal = list(order = c(1,1,1), period = 12), -->
+<!--                        #include.drift = TRUE, -->
+<!--                         method = 'CSS' -->
+<!--                        ) -->
+<!-- auto.arima(monthly_ts %>% log()) -->
+<!-- monthly_fit -->
+<!-- checkresiduals(monthly_fit) -->
+<!-- monthly_pred <- predict(monthly_fit, n.ahead = 12*9) -->
+<!-- ts.plot(monthly_ts , 2.718^monthly_pred$pred, log = "y", lty = c(1,3), xlab="time",ylab = "viewers (mil)") -->
+<!-- ``` -->
+
+
+## Model Comparison
+<br>
+
+In summary, the ARIMA model appears to be more scientific than the linear model as it tests for stationarity and separates out each component to be dealt with individually. Choosing the components `p,d,q` and `P,D,Q` can be determined from the ACF and PACF plots, but ultimately a model needs to be built to determine if the components will produce a useful forecast.
+
+The linear model appears less thorough than the ARIMA model and does not split out the seasonal and moving average components. But the linear model can account for many factors such as the need to scale some data due to Covid. The ARIMA model requires the data to be pre-processed to account for this. 
+
+Both the ARIMA and linear model forecasts show the same seasonal trends but the ARIMA shows a steeper long term decline. This means that by 2030 the linear model is forecasting a 50% reduction in traffic from 2017 whilst the ARIMA is predicting a 61% reduction. Visually, the shape of the ARIMA model appears to better reflect the seasonal trend in the data but the linear forecast appears to better reflect overall trend. Both the linear and ARIMA models show a smaller range in viewing figures thatn the true data.
+
+
+<br>
+
+
+```{r comparison_data, out.width="100%", echo = FALSE}
+
+##turn back to the original data without covid accounted for
+#tv<- tv %>% mutate(viewers = viewers +(4500000*covid))
+
+lm_data<-
+tv %>%
+  mutate(month = month(week_commencing)) %>%
+  select(year, month, week_commencing, viewers) %>%
+  rbind(forecast_year_poly_week %>%
+          mutate(month = month(week_commencing)) %>%
+          select(year, month,week_commencing, viewers))%>% 
+  rename(linear_model = viewers)
+
+
+arima_forecast <-
+tv %>%
+  mutate(month = month(week_commencing)) %>%
+  select(year, month, week_commencing,viewers) %>%
+  rbind(
+    data.frame(
+      viewers = as.matrix(exp(pred$pred)),
+      week_commencing = seq(
+        as.Date(tv$week_commencing %>% max() %>% ymd() + 7),
+        by = "week",
+        length.out = pred$pred %>% length())
+      ) %>%
+      mutate(year = year(week_commencing), month = month(week_commencing)) %>%
+      select(year, month, week_commencing, viewers)
+  ) %>% 
+  rename(arima = viewers)
+
+# ## get the weekly dates
+# df1 <- data.frame(
+#   viewers = NA,
+#   week_commencing = seq(
+#     as.Date(tv$week_commencing %>% max() %>% ymd() + 7),
+#     by = "week",
+#     length.out = pred$pred %>% length()
+#   )
+# ) %>%
+#   mutate(year = year(week_commencing),
+#          month = month(week_commencing)) %>%
+#   select(year, month, week_commencing)
+# 
+# weeks<- df1 %>% group_by(year,month) %>% filter(week_commencing == min(week_commencing))
+# ##get forecast
+# df2<- data.frame(
+#   viewers = as.matrix(exp(monthly_pred$pred)),
+#   week_commencing =(weeks$week_commencing)
+# ) %>% tail(-1) %>%
+#   mutate(year = year(week_commencing),
+#          month = month(week_commencing)) %>%
+#   select(year, month, week_commencing, viewers)
+# 
+# arima_monthly <-
+# monthly_tv %>%
+#   select(year, month, week_commencing, viewers) %>%
+#   rbind(
+#     df1 %>% left_join(df2, by = c("year", "month", "week_commencing"))
+#   ) %>% 
+#   fill(viewers, .direction = "down") %>% 
+#   rename(arima_monthly = viewers)
+
+
+forecasts <-
+  lm_data %>% left_join(arima_forecast, by = c('year', 'month', 'week_commencing')) %>% 
+  #left_join(arima_monthly, by = c('year', 'month', 'week_commencing')) %>% 
+  gather(key = model, value = viewers, linear_model:arima) %>% 
+  mutate(model = case_when( week_commencing<= max(tv$week_commencing) ~'true_value',
+                            week_commencing> max(tv$week_commencing) ~model)) %>% 
+  mutate(quarter = quarter(week_commencing))
+  
+year_starts <-
+  forecasts %>% 
+  group_by(year) %>% 
+  filter(week_commencing == min(week_commencing)) %>% 
+  select(year, month, week_commencing) %>%
+  mutate(quarter = quarter(week_commencing))
+
+ggplot(data  = forecasts, aes(x =week_commencing, y = viewers, colour = model))+
+  geom_point(size = 0.5)+
+  #geom_smooth()+
+  stat_smooth(method="lm", se = FALSE )+ #fullrange=TRUE
+  scale_y_continuous(
+      label = comma,
+      limits = ~ c(0, max(.x) * 1.1),
+      n.breaks = 10
+    ) +
+    scale_x_date(label = year_starts$year,
+                     breaks = year_starts$week_commencing
+    )  +
+    theme(
+      axis.text.x = element_text(angle = 90),
+      panel.grid.major.y = element_line(size = .1, color = "grey") ,
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      panel.grid.minor.y = element_blank(),
+      legend.title = element_blank(),
+      legend.position = "bottom"
+    ) +
+    labs(title = paste0("Forecast Comparison")) +
+    xlab("year") +
+    geom_vline(
+      xintercept = year_starts$week_commencing,
+      linetype = "dashed",
+      color = "grey"
+    ) 
 
 
 
@@ -919,50 +1176,64 @@ cbind(x = fit[["x"]],
 ```
 
 
-$$ y_t =  \delta + 0.0633 y_{t-1} \notag\\
-\epsilon + -0.5094 y_{t-1} $$
-
-<!-- ## generally the value of y at time t is given by at least 3 factors -->
-<!-- # the previous value of y (t-1) multiplied by some scale factor 'a'  -->
-<!-- # a value 'b' dependent on time t  i.e. 'bt' -->
-<!-- # a constant value 'c' -->
-<!-- ## y(t) = c + bt + a y(t-1) -->
 
 
 
 
 
 
-An example of a stationary series is the change in Google stock price from one day to the next. The graph appears visually stationary about the mean of zero, but the Augmented Dickey-Fuller Test can be used to statistically test for stationarity.
+```{r data_comp}
+# 
+#   lm_data %>% 
+#   left_join(arima_forecast, by = c('year', 'month', 'week_commencing')) %>%
+#   mutate(quarter = quarter(week_commencing)) %>% 
+#   select(year, quarter, month, week_commencing, linear_model, arima) %>% 
+#   filter(week_commencing > max(tv$week_commencing) ) %>% 
+#   mutate(perc_diff = paste0(signif(100*(linear_model - arima) / linear_model,2),'%') ) %>% 
+#   mutate(linear_model = comma(signif(linear_model,2)) ,
+#          arima = comma(signif(arima,2))
+#          ) %>% 
+#   kbl(
+#     booktabs = T,
+#     caption = "Linear Model vs Arima Forecast comparison ",
+#     col.names = c("Year",'Quarter','Month', 
+#                   "Week Commencing", "Linear Model", "Arima", "Percentage difference"),
+#     align = "rrr",
+#     escape = F
+#   ) %>%
+#   kable_styling(bootstrap_options = c("striped", "scale_down", "hover")) %>%
+#   scroll_box(height = "400px")
 
-<!-- ```{r stationary, echo=TRUE} -->
-<!-- library(quantmod) -->
-<!-- getSymbols("GOOGL", src = "yahoo") -->
-<!-- GOOGL <- dplyr::select(data.frame(date = index(GOOGL), coredata(GOOGL)), c('date','GOOGL.Close'))  -->
+ lm_data %>% 
+  left_join(arima_forecast, by = c('year', 'month', 'week_commencing'))  %>% 
+  #filter(week_commencing > max(tv$week_commencing) ) %>% 
+   group_by(year) %>% 
+   summarise(linear_model  = mean(linear_model),
+             arima = mean(arima)) %>% 
+  mutate(arima_perc = paste0(signif(100*(arima/first(arima) -1),2),"%"),
+         linear_perc = paste0(signif(100*(linear_model/first(linear_model) -1),2),"%") 
+         ) %>% 
+  mutate(linear_model = comma(signif(linear_model,2)) ,
+         arima = comma(signif(arima,2))
+         ) %>% 
+    select(year,linear_model,linear_perc, arima, arima_perc) %>% 
+  kbl(
+    booktabs = T,
+    caption = "Linear Model vs Arima Forecast comparison ",
+    col.names = c("Year","Linear Model","Linear % Change" ,"Arima","Arima % Change"),
+    align = "rrr",
+    escape = F
+  ) %>%
+  kable_styling(bootstrap_options = c("striped", "scale_down", "hover")) %>%
+  scroll_box(height = "400px")
 
-<!-- ## get google data and clean -->
-<!-- GOOGL<- data.frame(date = seq(as.Date(GOOGL$date %>% min() %>% ymd()),by = "day",length.out = 5805)) %>% ##get all days -->
-<!--   left_join(GOOGL, by = 'date') %>% ## join in google data -->
-<!--   fill(GOOGL.Close, .direction = "down") %>%  ### set the saturday/sunday price to previous working day -->
-<!--   mutate( GOOGL.Close = log(GOOGL.Close)) ## take the log -->
 
-<!-- ## turn to time series -->
-<!-- GOOGL<- ts(GOOGL$GOOGL.Close, -->
-<!--             freq= 365.25, #to get weeks in a year -->
-<!--             start=decimal_date(GOOGL$date %>% min()) )%>% diff() -->
+```
 
-<!-- plot(GOOGL) -->
-
-
-<!-- ### use the ADF test  -->
-<!-- adf.test(x=GOOGL) -->
-
-<!-- ``` -->
 
 
 <br>
-The ADF test has a null hypothesis that there is a time dependent relationship and an alternative hypothesis that there is not, i.e the series is stationary. For this data the p-value is 0.01 which is below the 0.05 (5%) value showing that the result is statistically valid and the null hypotesis should be rejected and the alternative accepted. The data is stationary.
-
-
-
-
+<br>
+<br>
+<br>
+<br>
