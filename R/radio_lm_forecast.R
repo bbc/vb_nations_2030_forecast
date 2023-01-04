@@ -6,7 +6,7 @@ library(scales)
 library(zoo)
 library(formattable)
 theme_set(theme_classic())
-
+options(scipen = 999)
 
 ################ read in covid data set ##############
 
@@ -64,7 +64,7 @@ get_messy_data<- function(df){
   return(raw_data)
 }
 
-clean_data <- function(df, df_name) {
+ clean_data <- function(df, df_name) {
 
   ## create a df with the period and each measure as a column
   clean_df_name<- df_name
@@ -274,7 +274,8 @@ make_lm <- function(raw_data, forecast_measure, data_source_name, colour_scheme)
     {if(grepl("BBC",data_source_name)) geom_point(shape = 16)
       else geom_point(shape = 17) } +
     scale_y_continuous(
-      label = label_comma(accuracy = .1),
+
+      label = label_comma(accuracy = 1),
       limits = ~ c(0, max(.x) * 1.1),
       n.breaks = 10
     ) +
@@ -595,9 +596,9 @@ library(forecast)
 england_3mw_bbc %>% head()
 
 ## make time series
-data_ts<<-ts(england_3mw_bbc$reach000s, 
+data_ts<-ts(england_3mw_bbc$reach000s[england_3mw_bbc$year <2020] , 
              freq= 4, ## quarterly
-             start=ymd('2015-01-01')
+             start=decimal_date(ymd('2015-01-01'))
 )
 ## simple look
 plot(data_ts)
@@ -625,29 +626,116 @@ abline(h = middle, col = "red")
 data_ts %>% log() %>% nsdiffs() ##0
 
 ##ACF and PACF
-acf(data_ts%>% log() %>% diff()) # 2
-pacf(data_ts %>% log() %>% diff())# 1
+acf(data_ts%>% log() %>% diff(), lag = 22) # 2
+pacf(data_ts %>% log() %>% diff(), lag = 22)# 1
 
 ### model
-fit <- forecast::Arima(log(data_ts), order  = c(2,1,1),
-                       seasonal = list(order = c(2, 1, 0), period =4),
+fit <- forecast::Arima(log(data_ts), 
+                       order  = c(2,1,1),
+                       seasonal = list(order = c(2, 1, 1), period =4),
                        method = 'CSS')
 fit
 checkresiduals(fit)
-pred <- predict(fit, n.ahead = 30)
+pred <- predict(fit, n.ahead = 41)
 
 ts.plot(2.718^pred$pred, log = "y", lty = c(1,3), xlab="time", ylab = "viewers (mil)")
 ts.plot(data_ts, 2.718^pred$pred, log = "y", lty = c(1,3), xlab="time",ylab = "viewers (mil)")
 
-### automatic model
-fit_auto <- auto.arima(log(data_ts))
-fit_auto ##suggests 0,1,1 
-checkresiduals(fit_auto) ## residuals are white noise.
 
-pred_auto <- predict(fit_auto, n.ahead = 30)
+## compare the forecast from ARIMA and lm
+dates<-
+  data.frame(week_commencing =
+             seq(
+               as.Date('2015-01-01' %>% ymd()),
+               by = "week",
+               length.out = 800
+             )) %>%
+  mutate(year = year(week_commencing),
+         quarter = quarter(week_commencing)) %>%
+  filter(paste0(year,quarter) < 20302) %>% 
+  group_by(year, quarter) %>% 
+  filter(week_commencing == min(week_commencing) )
 
-ts.plot(2.718^pred_auto$pred, log = "y", lty = c(1,3), xlab="time", ylab = "viewers (mil)")
-ts.plot(data_ts, 2.718^pred_auto$pred, log = "y", lty = c(1,3), xlab="time",ylab = "viewers (mil)")
-##just plots flat
+### put into df
+
+dates %>%
+  left_join(actual_forecast  %>% select(reach000s, year, quarter, actual_pred)) %>%
+  rename(type = actual_pred) %>%
+  mutate(type = case_when(type == 'pred' ~ 'linear model',
+                   type != 'pred' ~ 'actual'))
+
+forecast <-
+  dates %>%
+  left_join(actual_forecast  %>% select(reach000s, year, quarter, actual_pred)) %>%
+  rename(type = actual_pred) %>%
+  mutate(type = case_when(type == 'pred' ~ 'linear model',
+                          type != 'pred' ~ 'actual')) %>%
+  filter(paste0(year, type) != '2021actual'  & paste0(year, type) != '2022actual') %>% 
+  rbind(
+    data.frame(
+      week_commencing = dates$week_commencing[dates$year >= 2020] %>% head(n = length(pred$pred)),
+      reach000s = as.matrix(exp(pred$pred))
+    ) %>%
+      mutate(
+        year = year(week_commencing),
+        quarter = quarter(week_commencing)
+      ) %>%
+      select(year, quarter, week_commencing, reach000s) %>%
+      mutate(type = 'arima forecast')
+  )
+
+write.csv(forecast, "radio_forecast_comparison.csv", row.names = FALSE )
+ ### add this into markdown
+### do one more
+##make powerpoint
+
+year_starts <-
+    forecast %>% 
+    group_by(year) %>% 
+    filter(week_commencing == min(week_commencing)) %>% 
+    select(year, quarter, week_commencing) 
+  
+ggplot(data  = forecast, aes(x =week_commencing, y = reach000s, colour = type))+
+  geom_point(size = 1)+
+  #geom_smooth()+
+  #stat_smooth(method="lm", se = FALSE )+ #fullrange=TRUE
+  scale_y_continuous(
+    label = label_comma(accuracy = 1),
+    limits = ~ c(0, max(.x) * 1.1),
+    n.breaks = 10
+  ) +
+  scale_x_date(label = year_starts$year,
+               breaks = year_starts$week_commencing
+  )  +
+  theme(
+    axis.text.x = element_text(angle = 90),
+    panel.grid.major.y = element_line(size = .1, color = "grey") ,
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
+    panel.grid.minor.y = element_blank(),
+    legend.title = element_blank(),
+    legend.position = "bottom"
+  ) +
+  labs(title = paste0("RAJAR Local Radio Reach")) +
+  xlab("year") +
+  geom_vline(
+    xintercept = year_starts$week_commencing,
+    linetype = "dashed",
+    color = "grey"
+  ) 
+
+
+
+
+# ### automatic model
+# fit_auto <- forecast::auto.arima(data_ts %>% log())
+# fit_auto ##suggests 0,1,1 
+# checkresiduals(fit_auto) ## residuals are white noise.
+# 
+# pred_auto <- predict(fit_auto, n.ahead = 30) ## doesn't work
+# 
+# ts.plot(2.718^pred_auto$pred, log = "y", lty = c(1,3), xlab="time", ylab = "viewers (mil)")
+# ts.plot(data_ts, 2.718^pred_auto$pred, log = "y", lty = c(1,3), xlab="time",ylab = "viewers (mil)")
+# ##just plots flat
 
 
