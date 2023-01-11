@@ -157,6 +157,7 @@ clean_data %>% filter(region =='England') %>%
   replace(is.na(.), 1) %>% 
   mutate(viewers = viewers * scale)
 england_scaled %>% head()
+
 ### Basic plot
 make_plot(
   data = england_scaled,
